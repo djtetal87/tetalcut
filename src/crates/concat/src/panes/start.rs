@@ -118,11 +118,11 @@ fn default_location() -> String {
 /// new project failed with EPERM. https://github.com/jub0t/Concat/issues/299
 fn location_on(os: &str, desktop: Option<PathBuf>, home: impl Fn(&str) -> String) -> String {
     match os {
-        "android" => home("Concat"),
-        "ios" => home("Documents/Concat"),
+        "android" => home("TetalCut"),
+        "ios" => home("Documents/TetalCut"),
         _ => desktop
-            .map(|desktop| desktop.join("Concat").to_string_lossy().into_owned())
-            .unwrap_or_else(|| home("Desktop/Concat")),
+            .map(|desktop| desktop.join("TetalCut").to_string_lossy().into_owned())
+            .unwrap_or_else(|| home("Desktop/TetalCut")),
     }
 }
 
@@ -384,15 +384,15 @@ mod tests {
         let desktop = || Some(PathBuf::from("/desk"));
         assert_eq!(
             location_on("ios", desktop(), home),
-            "/home/Documents/Concat"
+            "/home/Documents/TetalCut"
         );
-        assert_eq!(location_on("ios", None, home), "/home/Documents/Concat");
-        assert_eq!(location_on("android", None, home), "/home/Concat");
+        assert_eq!(location_on("ios", None, home), "/home/Documents/TetalCut");
+        assert_eq!(location_on("android", None, home), "/home/TetalCut");
         assert_eq!(
             PathBuf::from(location_on("macos", desktop(), home)),
-            Path::new("/desk").join("Concat")
+            Path::new("/desk").join("TetalCut")
         );
-        assert_eq!(location_on("linux", None, home), "/home/Desktop/Concat");
+        assert_eq!(location_on("linux", None, home), "/home/Desktop/TetalCut");
     }
 
     /// The next untitled name skips every folder already there, and starts

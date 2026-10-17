@@ -38,7 +38,10 @@ pollster = "0.4"
 # ONNX Runtime, for the cutout models. The binaries come prebuilt for every
 # target the app ships on, with the platform's own accelerator behind them:
 # CoreML on macOS and iOS, DirectML on Windows, NNAPI on Android.
-ort = "=2.0.0-rc.13"
+# TetalCut: the ONNX Runtime API this asks for is held at 23, what 1.23.2 (the last runtime
+# Microsoft built for Intel Macs) serves; ort's default asks for 27, and the first cutout on an
+# Intel Mac would fail to get it. Newer runtimes (Apple silicon, Linux, Windows) serve 23 too.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-23"] }
 
 [workspace.lints.rust]
 missing_docs = "warn"

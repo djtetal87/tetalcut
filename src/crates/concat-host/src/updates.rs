@@ -173,6 +173,11 @@ fn github_message(value: &serde_json::Value) -> String {
 
 /// Asks GitHub for the releases; see [`releases_from_json`].
 pub fn fetch_releases() -> Result<Vec<Release>, String> {
+    // TetalCut (a fork of Concat) is updated from its own source, never from Concat's releases:
+    // offering them would put official Concat in this build's place
+    if crate::dirs::IDENTIFIER != "app.concat.editor" {
+        return Ok(Vec::new());
+    }
     releases_from_json(&get_text(RELEASES_URL)?)
 }
 
@@ -252,6 +257,10 @@ pub enum Fixed {
 pub fn installed_as() -> Result<PackageKind, Fixed> {
     static KNOWN: OnceLock<Result<PackageKind, Fixed>> = OnceLock::new();
     *KNOWN.get_or_init(|| {
+        // TetalCut: built from source, never switched to a Concat release
+        if crate::dirs::IDENTIFIER != "app.concat.editor" {
+            return Err(Fixed::NotFromPackage);
+        }
         if cfg!(target_os = "macos") {
             Ok(PackageKind::Dmg)
         } else if cfg!(target_os = "windows") {

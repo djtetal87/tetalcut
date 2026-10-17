@@ -79,8 +79,8 @@ fn main() {
         // build, where the default would be the crate's lower-case name.
         winresource::WindowsResource::new()
             .set_icon(icon)
-            .set("ProductName", "Concat")
-            .set("FileDescription", "Concat")
+            .set("ProductName", "TetalCut")
+            .set("FileDescription", "TetalCut (a fork of Concat)")
             .set(
                 "LegalCopyright",
                 "Copyright 2026 Jareer and Concat contributors, AGPL-3.0-or-later",

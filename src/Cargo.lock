@@ -1137,6 +1137,7 @@ dependencies = [
  "concat-effects",
  "concat-export",
  "concat-host",
+ "concat-ios",
  "concat-media",
  "concat-project",
  "concat-server",
@@ -1257,6 +1258,16 @@ dependencies = [
  "sha2",
  "ureq 2.12.1",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "concat-ios"
+version = "0.2.7"
+dependencies = [
+ "block2 0.6.2",
+ "log",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]
@@ -4530,6 +4541,7 @@ checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.13.1",
  "block2 0.6.2",
+ "libc",
  "objc2 0.6.4",
  "objc2-core-foundation",
 ]
@@ -6402,7 +6414,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",

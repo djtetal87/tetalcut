@@ -33,6 +33,16 @@ fn main() -> Result<(), slint::PlatformError> {
     // A failure here is the one this binary would otherwise swallow: with
     // no console, the runtime's "Error: ..." on standard error is lost.
     // https://github.com/jub0t/Concat/issues/135
+    // TetalCut on an iPhone: Import opens Photos or Files, and a finished
+    // export is saved to Photos (Concat's phone hooks, answered by UIKit)
+    #[cfg(target_os = "ios")]
+    {
+        concat::install_file_picker(Box::new(concat_ios::pick));
+        concat::install_export_publisher(concat::ExportPublisher {
+            folder: concat_ios::PHOTOS_FOLDER.into(),
+            publish: Box::new(concat_ios::publish),
+        });
+    }
     let launch = launch
         .map_err(slint::PlatformError::Other)
         .inspect_err(concat::report_startup_failure)?;

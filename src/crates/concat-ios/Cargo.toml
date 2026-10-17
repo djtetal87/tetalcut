@@ -1,0 +1,16 @@
+[package]
+name = "concat-ios"
+description = "TetalCut on an iPhone: the system's media picker and saving exports to Photos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[target.'cfg(target_os = "ios")'.dependencies]
+log = "0.4"
+objc2 = "0.6.4"
+block2 = "0.6.2"
+objc2-foundation = "0.3.2"
+
+[lints]
+workspace = true

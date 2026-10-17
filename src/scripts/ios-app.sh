@@ -33,6 +33,15 @@ mkdir -p "$app/Frameworks"
 cp "$binary" "$app/Concat"
 cp -R "$framework/$slice/SherpaOnnxC.framework" "$app/Frameworks/"
 cp "$root/assets/icons/concat_logo_512.png" "$app/AppIcon.png" 2>/dev/null || true
+# TetalCut: the home-screen icon (iPhone 120 and 180, iPad 152 and 167), from
+# the square, opaque artwork; iOS rounds the corners itself
+icon_src="$root/assets/icons/tetalcut_ios_1024.png"
+if [ -f "$icon_src" ]; then
+  sips -z 120 120 "$icon_src" --out "$app/AppIcon60x60@2x.png" >/dev/null
+  sips -z 180 180 "$icon_src" --out "$app/AppIcon60x60@3x.png" >/dev/null
+  sips -z 152 152 "$icon_src" --out "$app/AppIcon76x76@2x~ipad.png" >/dev/null
+  sips -z 167 167 "$icon_src" --out "$app/AppIcon83.5x83.5@2x~ipad.png" >/dev/null
+fi
 
 # The binary was linked against the dylib by the name the linker saw in
 # vendor/; in the bundle it lives in Frameworks/ under the framework's
@@ -56,9 +65,9 @@ cat > "$app/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Concat</string>
-  <key>CFBundleDisplayName</key><string>Concat</string>
-  <key>CFBundleIdentifier</key><string>app.concat.editor</string>
+  <key>CFBundleName</key><string>TetalCut</string>
+  <key>CFBundleDisplayName</key><string>TetalCut</string>
+  <key>CFBundleIdentifier</key><string>com.ajmediastudio.tetalcut</string>
   <key>CFBundleVersion</key><string>${version}</string>
   <key>CFBundleShortVersionString</key><string>${version}</string>
   <key>CFBundleExecutable</key><string>Concat</string>
@@ -88,11 +97,28 @@ cat > "$app/Info.plist" <<PLIST
       </array>
     </dict>
   </dict>
+  <key>CFBundleIcons</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconFiles</key><array><string>AppIcon60x60</string></array>
+    </dict>
+  </dict>
+  <key>CFBundleIcons~ipad</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconFiles</key><array><string>AppIcon60x60</string><string>AppIcon76x76</string><string>AppIcon83.5x83.5</string></array>
+    </dict>
+  </dict>
   <key>CADisableMinimumFrameDurationOnPhone</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
-  <key>NSPhotoLibraryUsageDescription</key><string>Concat imports the clips you pick.</string>
-  <key>NSMicrophoneUsageDescription</key><string>Concat records voice-over.</string>
-  <key>NSHumanReadableCopyright</key><string>AGPL-3.0-or-later. See THIRD_PARTY_NOTICES.md.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>TetalCut importa los videos y fotos que elijas.</string>
+  <key>NSPhotoLibraryAddUsageDescription</key><string>TetalCut guarda en Fotos los videos que exportas.</string>
+  <key>UIFileSharingEnabled</key><true/>
+  <key>LSSupportsOpeningDocumentsInPlace</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>TetalCut graba la voz en off con el micrófono.</string>
+  <key>NSHumanReadableCopyright</key><string>TetalCut, a fork of Concat (Jareer and Concat contributors). AGPL-3.0-or-later.</string>
 </dict>
 </plist>
 PLIST

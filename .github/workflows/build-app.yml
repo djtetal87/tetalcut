@@ -43,10 +43,8 @@ name: Build app
 # The six targets are a matrix so one fails without taking the rest down;
 # `fail-fast` is off for the same reason.
 on:
-  # TetalCut: built by hand (Actions > Build app > Run workflow) and on every push to main
+  # TetalCut: built by hand (Actions > Build app > Run workflow)
   workflow_dispatch:
-  push:
-    branches: [main]
   workflow_call:
     inputs:
       ref:

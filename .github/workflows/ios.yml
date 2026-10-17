@@ -1,0 +1,113 @@
+name: Build for iPhone
+
+# TetalCut for the iPhone: the iOS job of Concat's "Build for phones"
+# (mobile.yml), with TetalCut's name and icon and the iPhone's own media
+# picker and Photos export (crates/concat-ios). The .ipa is ad-hoc signed:
+# Sideloadly signs it again with the tester's Apple ID on the way onto the
+# phone. Runs by hand (Actions > Build for iPhone > Run workflow).
+on:
+  workflow_dispatch:
+
+jobs:
+  ios:
+    name: TetalCut iOS arm64
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' src/Cargo.toml | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building TetalCut $version for aarch64-apple-ios"
+      - name: The pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' src/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master (v1), 2026-10-09
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          targets: aarch64-apple-ios
+
+      - run: brew install cmake
+
+      # Restored and saved as two steps rather than one, so the FFmpeg
+      # build is kept the moment it finishes, whatever happens to the Rust
+      # build after it.
+      - name: FFmpeg for iOS (cached)
+        id: ffmpeg
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: src/vendor/ffmpeg/aarch64-apple-ios
+          key: ffmpeg-aarch64-apple-ios-${{ hashFiles('src/scripts/ffmpeg-mobile.sh') }}
+      - name: FFmpeg for iOS
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: src/scripts/ffmpeg-mobile.sh aarch64-apple-ios
+      - name: FFmpeg for iOS (save)
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: src/vendor/ffmpeg/aarch64-apple-ios
+          key: ${{ steps.ffmpeg.outputs.cache-primary-key }}
+
+      - name: sherpa-onnx for iOS
+        run: src/scripts/sherpa-mobile.sh aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src
+          key: aarch64-apple-ios
+
+      - name: Build
+        working-directory: src
+        run: |
+          set -o pipefail
+          eval "$(scripts/mobile-env.sh aarch64-apple-ios)"
+          cargo build --release -p concat --target aarch64-apple-ios 2>&1 | tee build.log
+
+      - name: Build log to the summary (failure only)
+        if: failure()
+        run: |
+          if [ -f src/build.log ]; then
+            {
+              echo "### Build failed: iOS arm64"
+              echo '```'
+              tail -n 150 src/build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The bundle: binary, Info.plist and the sherpa-onnx framework, ad-hoc
+      # signed. A developer's identity and provisioning profile go on with
+      # codesign before it can be installed on a phone.
+      - name: Bundle
+        run: src/scripts/ios-app.sh aarch64-apple-ios release
+
+      # Every framework in the app against the iOS it declares (#294). A
+      # warning until a run has shown what is there.
+      - name: Minimum iOS of everything in the app
+        run: |
+          app=src/target/aarch64-apple-ios/release/Concat.app
+          scripts/ci/check-min-os.sh "$app" "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$app/Info.plist")"
+
+      # An .ipa is the bundle under Payload/ in a zip: the form every
+      # sideloading tool and Xcode's Devices window take, re-signing it
+      # with the tester's own identity on the way onto the phone. ditto
+      # keeps the bundle's signature and resource forks where zip would
+      # not.
+      - name: Stage
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p stage payload/Payload
+          cp -R src/target/aarch64-apple-ios/release/Concat.app payload/Payload/
+          (cd payload && ditto -c -k --keepParent Payload "../stage/TetalCut-$VERSION-ios-arm64.ipa")
+          ls -l stage
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: TetalCut-ios-arm64
+          path: stage/*
+          if-no-files-found: error
+

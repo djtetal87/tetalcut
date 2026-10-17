@@ -84,6 +84,8 @@ wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
 libc = "0.2"
 
 [target.'cfg(target_os = "ios")'.dependencies]
+# TetalCut: the iPhone's media picker and saving exports to Photos
+concat-ios = { path = "../concat-ios" }
 slint = { version = "1.18", default-features = false, features = [
     "std",
     "backend-winit",

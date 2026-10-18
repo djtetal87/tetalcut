@@ -18,8 +18,9 @@ pub type Knobs = Vec<(&'static str, f64)>;
 pub struct Levels {
     /// Mean display luma, 0..1.
     pub mean: f64,
-    /// The 2nd and 98th percentiles of display luma.
+    /// The 2nd percentile of display luma.
     pub low: f64,
+    /// The 98th percentile of display luma.
     pub high: f64,
     /// Share of pixels at the very top (clipped).
     pub clipped: f64,

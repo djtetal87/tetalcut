@@ -1083,8 +1083,8 @@ component TemplateShelf inherits Rectangle {
     shelf := Flickable {
         width: root.width;
         height: root.height;
-        viewport-width: Math.max(root.width, root.content-w);
-        viewport-height: root.height;
+        content-width: Math.max(root.width, root.content-w);
+        content-height: root.height;
         interactive: root.content-w > root.width;
 
         for template[index] in root.templates: TemplateCard {

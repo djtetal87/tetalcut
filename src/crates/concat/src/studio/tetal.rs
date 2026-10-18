@@ -87,7 +87,7 @@ impl Studio {
             .clips
             .iter()
             .filter(|clip| clip.kind == model::ClipKind::Text)
-            .cloned()
+            .map(|clip| Clip::clone(clip))
             .collect();
         if titles.is_empty() {
             self.notify(&t("motion.noTitles"), true);

@@ -423,6 +423,7 @@ export component Seat inherits Rectangle {
             merge => { Editor.merge(); }
             delete-selected => { Editor.delete-selected(); }
             captions => { Editor.captions(); }
+            sounds => { Editor.sounds-open(true); }
             speak => { Editor.speak(); }
             record-voiceover => { Editor.record-voiceover(); }
             add-track(bottom) => { Editor.add-track(bottom); }

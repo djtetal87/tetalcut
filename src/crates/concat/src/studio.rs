@@ -47,6 +47,7 @@ use concat_project::model::{
 mod consolidate;
 use consolidate::MergeJob;
 mod tetal;
+mod sound_bank;
 pub use tetal::templates_model;
 use slint::{Model, ModelRc, SharedString, VecModel};
 
@@ -582,6 +583,9 @@ pub struct Models {
     pub adjust_curves: Rc<VecModel<CurveData>>,
     /// TetalCut: the speed panel's one curve.
     pub speed_curve: Rc<VecModel<CurveData>>,
+    /// TetalCut: the sound bank's categories and the chosen one's sounds.
+    pub sound_categories: Rc<VecModel<SharedString>>,
+    pub sounds: Rc<VecModel<SoundRowData>>,
     pub visual_wheels: Rc<VecModel<WheelGroupData>>,
     pub visual_curves: Rc<VecModel<CurveGroupData>>,
     /// The picture's chain's colour knobs, a row each.
@@ -663,6 +667,8 @@ impl Models {
             adjust_wheels: Rc::new(VecModel::default()),
             adjust_curves: Rc::new(VecModel::default()),
             speed_curve: Rc::new(VecModel::default()),
+            sound_categories: Rc::new(VecModel::default()),
+            sounds: Rc::new(VecModel::default()),
             visual_wheels: Rc::new(VecModel::default()),
             visual_colours: Rc::new(VecModel::default()),
             visual_curves: Rc::new(VecModel::default()),
@@ -8086,6 +8092,7 @@ impl Studio {
         editor.set_motion_loop(looping as i32);
         editor.set_keyed_here(self.keyed_here());
         editor.set_placeholder_here(self.placeholder_here());
+        self.publish_sounds(&editor, models);
         // The chain's, one group a link, in chain order, each group's list
         // the model kept for its link.
         let visual_curves = placed(visual_curves);

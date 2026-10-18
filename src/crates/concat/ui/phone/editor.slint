@@ -679,6 +679,12 @@ export component PhoneEditor inherits Rectangle {
                 current: root.sheet == "transitions";
                 clicked => { root.show("transitions", false); }
             }
+            // TetalCut: the sound bank
+            ToolItem {
+                glyph: Glyph.music;
+                label: I18n.t("sounds.sounds");
+                clicked => { Editor.sounds-open(true); }
+            }
             ToolItem {
                 glyph: Glyph.waveform;
                 label: I18n.t("phone.captions");

@@ -204,6 +204,8 @@ export component TimelineTray inherits Rectangle {
     callback delete-selected();
     callback captions();
     callback speak();
+    /// TetalCut: the sound bank.
+    callback sounds();
     callback record-voiceover();
     /// Add a lane: on top of the stack, or with `bottom` under it.
     callback add-track(bottom: bool);
@@ -371,6 +373,12 @@ export component TimelineTray inherits Rectangle {
 
         Divider { }
 
+        TrayButton {
+            glyph: Glyph.music;
+            label: I18n.t("sounds.sounds");
+            icon-size: 16px;
+            clicked => { root.sounds(); }
+        }
         TrayButton {
             glyph: Glyph.text-mark;
             label: I18n.t("tray.generateCaptions");

@@ -26,6 +26,9 @@ What differs from Concat:
 - Templates: mark clips as replaceable, save the edit as a template, and make a new video from
   one by choosing the clips; on a Mac and an iPhone they live in Documents ▸ TetalCut
   Plantillas, to share.
+- A sound bank (music and effects by category, heard with a tap): its built-in sounds are
+  synthesised by `scripts/tetalcut-sounds.py` - no samples - so they are this project's own;
+  the bank is the folder Documents ▸ TetalCut Sonidos, where any sounds of your own join them.
 
 If TetalCut is ever given or sold to anyone, the AGPL applies: its complete source, these
 changes included, goes with it under the same licence.

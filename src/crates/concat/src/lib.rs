@@ -51,6 +51,7 @@ mod panes;
 mod prefs;
 mod presets;
 mod source;
+mod sounds;
 mod studio;
 mod sysinfo;
 /// Native Wayland file drops, which winit does not report; see the module.
@@ -334,6 +335,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         editor.set_motion_loops(names(&concat_project::motion::LOOPS));
         editor.set_speed_presets(names(&concat_project::speed::PRESETS));
         editor.set_templates(ModelRc::from(crate::studio::templates_model()));
+        editor.set_sound_categories(ModelRc::from(models.sound_categories.clone()));
+        editor.set_sounds(ModelRc::from(models.sounds.clone()));
         editor.set_visual_wheels(ModelRc::from(models.visual_wheels.clone()));
         editor.set_visual_curves(ModelRc::from(models.visual_curves.clone()));
         editor.set_visual_colours(ModelRc::from(models.visual_colours.clone()));
@@ -1222,6 +1225,21 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_placeholder_toggle(on_lanes!(|state| {
         state.placeholder_toggle();
+    }));
+    editor.on_sounds_open(on_window!(|state, open: bool| {
+        state.sounds_open(open);
+    }));
+    editor.on_sound_category_pick(on_lanes!(|state, name: SharedString| {
+        state.sound_category(name.as_str());
+    }));
+    editor.on_sound_preview(on_window!(|state, path: SharedString| {
+        state.sound_preview(path.as_str());
+    }));
+    editor.on_sound_add(on_window!(|state, path: SharedString| {
+        state.sound_add(path.as_str());
+    }));
+    editor.on_sounds_import(on_window!(|state| {
+        state.sounds_import();
     }));
     editor.on_curve_point(on_lanes!(|state,
                                      entry: i32,

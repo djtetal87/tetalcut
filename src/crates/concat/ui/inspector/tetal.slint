@@ -9,7 +9,8 @@
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
 import { Section, SectionBody, SectionHeader } from "../primitives/panel.slint";
-import { Button } from "../primitives/modal.slint";
+import { Button, Modal } from "../primitives/modal.slint";
+import { Glyph, Icon } from "../icons.slint";
 import { Note } from "controls.slint";
 import { CurveEditor } from "grading.slint";
 import { CategoryPillBar } from "../workspace/media-pane.slint";
@@ -153,6 +154,124 @@ export component SpeedCurvePanel inherits VerticalLayout {
             Note {
                 text: I18n.t("speedCurve.hint");
             }
+        }
+    }
+}
+
+/// TetalCut: a round icon button of the sound bank's rows.
+component RoundIcon inherits Rectangle {
+    in property <Glyph> glyph;
+    in property <bool> lit;
+    callback clicked();
+
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+    background: root.lit ? Theme.accent : touch.has-hover ? Theme.field-hover : Theme.field;
+
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        glyph: root.glyph;
+        size: 14px;
+        tint: root.lit ? white : Theme.fg;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// TetalCut: the sound bank - music and effects by category; a tap hears
+/// a sound, + puts it at the playhead.
+export component SoundsDialog inherits Modal {
+    open: Editor.sounds-shown;
+    title: I18n.t("sounds.sounds");
+    glyph: Glyph.music;
+    surface-width: 520px;
+    closed => { Editor.sounds-open(false); }
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        CategoryPillBar {
+            categories: Editor.sound-categories;
+            current: Editor.sound-category;
+            picked(name) => { Editor.sound-category-pick(name); }
+        }
+
+        Flickable {
+            min-height: 220px;
+            preferred-height: 420px;
+            vertical-stretch: 1;
+            content-height: list.preferred-height;
+
+            list := VerticalLayout {
+                spacing: 4px;
+
+                for sound in Editor.sounds: Rectangle {
+                    height: 48px;
+                    border-radius: Theme.r-xs;
+                    background: sound.playing ? Theme.field-active : row-touch.has-hover ? Theme.field-hover : transparent;
+
+                    row-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { Editor.sound-preview(sound.path); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 10px;
+
+                        VerticalLayout {
+                            alignment: center;
+                            RoundIcon {
+                                glyph: sound.playing ? Glyph.pause : Glyph.play;
+                                lit: sound.playing;
+                                clicked => { Editor.sound-preview(sound.path); }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: sound.name;
+                                color: Theme.fg;
+                                font-size: Theme.fs-lg;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: sound.loading ? I18n.t("sounds.loading") : sound.category;
+                                color: Theme.fg-dim;
+                                font-size: Theme.fs-sm;
+                                overflow: elide;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            RoundIcon {
+                                glyph: Glyph.plus;
+                                clicked => { Editor.sound-add(sound.path); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Button {
+            block: true;
+            glyph: Glyph.import;
+            label: I18n.t("sounds.importMine");
+            clicked => { Editor.sounds-import(); }
+        }
+        Text {
+            text: I18n.t("sounds.folderHint");
+            color: Theme.fg-dim;
+            font-size: Theme.fs-sm;
+            wrap: word-wrap;
         }
     }
 }

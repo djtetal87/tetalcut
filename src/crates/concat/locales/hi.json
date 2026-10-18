@@ -703,5 +703,13 @@
   "template.saved": "Template “{0}” saved with {1} clips to replace",
   "template.chooseClips": "Choose {0} clips, in order",
   "template.needsClips": "The template needs {0} clips; you chose {1}",
-  "template.ready": "Your video from the template is ready"
+  "template.ready": "Your video from the template is ready",
+  "sounds.sounds": "Sounds",
+  "sounds.added": "Sound added at the playhead",
+  "sounds.importTitle": "Add your sounds",
+  "sounds.audioFiles": "Audio files",
+  "sounds.imported": "{0} sounds added to Mis sonidos",
+  "sounds.loading": "Loading…",
+  "sounds.importMine": "Add my sounds or music",
+  "sounds.folderHint": "Tap a sound to hear it, + to put it at the playhead. The bank is the TetalCut Sonidos folder (Documents on a Mac, Files on an iPhone): each folder you put there is a category. TetalCut's own sounds are free to use; for commercial songs, check the rights before publishing."
 }

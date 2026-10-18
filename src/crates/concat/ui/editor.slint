@@ -44,6 +44,17 @@ export struct TemplateCardData {
     poster: image,
 }
 
+/// TetalCut: one sound in the bank.
+export struct SoundRowData {
+    name: string,
+    category: string,
+    /// The file: what previewing and adding name.
+    path: string,
+    playing: bool,
+    /// Being brought into the project to be heard.
+    loading: bool,
+}
+
 export global Editor {
     // ── the layout ───────────────────────────────────────────────────────
     //
@@ -224,6 +235,18 @@ export global Editor {
     callback template-save();
     in-out property <bool> placeholder-here;
     callback placeholder-toggle();
+    /// The sound bank: shown, its categories (Todos first), the chosen one,
+    /// that category's sounds; a sound heard (again: paused) or put at the
+    /// playhead; the user's own files brought in.
+    in-out property <bool> sounds-shown;
+    in-out property <[string]> sound-categories;
+    in-out property <string> sound-category;
+    in-out property <[SoundRowData]> sounds;
+    callback sounds-open(open: bool);
+    callback sound-category-pick(name: string);
+    callback sound-preview(path: string);
+    callback sound-add(path: string);
+    callback sounds-import();
     /// The Adjust tab's wheels and curves, and the picture chain's, a
     /// group a link: see `grading.slint`. A wheel's puck and master are set
     /// as knobs, `<key>.x`, `<key>.y` and `<key>.m`; a curve's points by

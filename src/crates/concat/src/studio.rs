@@ -1025,6 +1025,11 @@ fn new_title_style(prefs: &crate::prefs::Preferences) -> TextStyle {
 /// A label for a catalogue id: "black-white" reads as "Black White".
 /// One kind's shelves for the inspector: the shelf labels, in catalogue
 /// order, and every package on them with the index of its shelf.
+/// TetalCut: a phone's sheets have no strip of shelves to pick one from,
+/// so they list every package of the kind (sorted by shelf), not just the
+/// first shelf's: the iPhone showed three transitions of twenty-two.
+const PHONE: bool = cfg!(any(target_os = "android", target_os = "ios"));
+
 fn shelves(
     kind: PackageKind,
     view: &LibraryView,
@@ -1071,7 +1076,7 @@ fn shelves(
             name.to_lowercase().contains(&query) || description.to_lowercase().contains(&query)
         } else if !view.category.is_empty() {
             package.matches_category(&view.category)
-        } else if view.group >= 0 {
+        } else if view.group >= 0 && !PHONE {
             group as i32 == view.group
         } else {
             true

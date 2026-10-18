@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "Satu judul untuk setiap frasa yang diucapkan, dipotong mengikuti waktu kata-katanya, di lajur pertama yang masih lowong.",
   "captions.oneTitlePerSentence": "Satu judul untuk setiap kalimat, ditampilkan selama waktu yang dibutuhkan untuk membacanya, berurutan di lajur pertama yang masih lowong.",
   "captions.placement": "Penempatan",
+  "captions.template": "Template",
   "captions.style": "Style",
   "captions.styleStill": "Still",
   "captions.stylePop": "Pop in",

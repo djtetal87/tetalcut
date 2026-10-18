@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "発話されたフレーズごとにタイトルを一つ、言葉のタイミングどおりに、空いている最初のレーンへ。",
   "captions.oneTitlePerSentence": "一文ごとにタイトルを一つ、読み終えるのに必要な時間だけ表示し、空いている最初のレーンに順番に並べます。",
   "captions.placement": "配置",
+  "captions.template": "Template",
   "captions.style": "Style",
   "captions.styleStill": "Still",
   "captions.stylePop": "Pop in",

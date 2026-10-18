@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "ไตเติลหนึ่งรายการต่อหนึ่งวลีที่พูด ตัดตามจังหวะของคำ วางบนเลนแรกที่มีที่ว่าง",
   "captions.oneTitlePerSentence": "ไตเติลหนึ่งรายการต่อหนึ่งประโยค แสดงค้างไว้นานพอให้อ่านทัน เรียงต่อกันบนเลนแรกที่มีที่ว่าง",
   "captions.placement": "ตำแหน่งที่วาง",
+  "captions.template": "Template",
   "captions.style": "Style",
   "captions.styleStill": "Still",
   "captions.stylePop": "Pop in",

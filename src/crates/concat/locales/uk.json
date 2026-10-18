@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "Один титр на кожну вимовлену фразу, точно за таймінгом слів, на першій вільній доріжці.",
   "captions.oneTitlePerSentence": "Один титр на речення, рівно стільки, скільки треба, щоб його прочитати, один за одним на першій вільній доріжці.",
   "captions.placement": "Розташування",
+  "captions.template": "Template",
   "captions.style": "Style",
   "captions.styleStill": "Still",
   "captions.stylePop": "Pop in",

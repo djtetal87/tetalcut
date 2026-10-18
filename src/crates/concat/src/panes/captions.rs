@@ -56,6 +56,8 @@ pub enum CaptionsMsg {
     SizeChanged(i32),
     /// TetalCut: still, pop in, or word by word.
     StyleChanged(i32),
+    /// TetalCut: the caption template (colours, outline, box, font).
+    TemplateChanged(i32),
     /// Run the pass the sheet describes.
     Begin,
     Cancel,
@@ -75,6 +77,8 @@ struct Subject {
     look: (f64, f64),
     /// The style chosen when the run began (see [`CaptionsPane::style`]).
     style: usize,
+    /// The template chosen when the run began.
+    template: usize,
     /// The transcriber model, and the thirty-second windows whisper reads
     /// the sound in: what the run's timing is kept by.
     model: String,
@@ -109,6 +113,8 @@ pub struct CaptionsPane {
     pub style: usize,
     /// Whether a style was chosen this session (else the sheet opens on pop in).
     style_chosen: bool,
+    /// TetalCut: row in [`TEMPLATES`], Clásico first. Kept for the session.
+    pub template: usize,
     pub running: bool,
     /// How far the running transcription looks.
     pub pace: Pace,
@@ -159,6 +165,9 @@ impl CaptionsPane {
                 self.placement = (index.max(0) as usize).min(2);
             }
             CaptionsMsg::SizeChanged(index) => self.size = (index.max(0) as usize).min(2),
+            CaptionsMsg::TemplateChanged(index) => {
+                self.template = (index.max(0) as usize).min(TEMPLATES.len() - 1);
+            }
             CaptionsMsg::StyleChanged(index) => {
                 self.style = (index.max(0) as usize).min(2);
                 self.style_chosen = true;
@@ -188,7 +197,8 @@ impl CaptionsPane {
                         let Some(subject) = subject else {
                             return;
                         };
-                        let base = studio.prefs.title_style.clone();
+                        let (base, accent) =
+                            template_styles(subject.template, studio.prefs.title_style.as_ref());
                         let commands = segment_captions(
                             &segments,
                             subject.start,
@@ -196,6 +206,7 @@ impl CaptionsPane {
                             subject.look,
                             subject.style,
                             base.as_ref(),
+                            accent.as_ref(),
                         );
                         let count = commands.len();
                         self.open = false;
@@ -239,6 +250,7 @@ impl CaptionsPane {
             // the last style chosen this session; pop in the first time
             style: if self.style_chosen { self.style } else { 1 },
             style_chosen: self.style_chosen,
+            template: self.template,
             timings: std::mem::take(&mut self.timings),
             ..CaptionsPane::default()
         };
@@ -261,7 +273,7 @@ impl CaptionsPane {
         }
         let look = self.look();
         let mut at = 0.0;
-        let base = studio.prefs.title_style.clone();
+        let (base, accent) = template_styles(self.template, studio.prefs.title_style.as_ref());
         // the script's lines as segments without word times: their words
         // are spread over each line by length (see `segment_captions`)
         let segments: Vec<Segment> = lines
@@ -284,6 +296,7 @@ impl CaptionsPane {
             look,
             self.style,
             base.as_ref(),
+            accent.as_ref(),
         );
         let count = commands.len();
         self.open = false;
@@ -343,6 +356,7 @@ impl CaptionsPane {
             speed: clip.speed,
             look: self.look(),
             style: self.style,
+            template: self.template,
             model,
             windows,
         });
@@ -387,6 +401,14 @@ impl CaptionsPane {
             placement: self.placement as i32,
             size: self.size as i32,
             style: self.style as i32,
+            templates: std::rc::Rc::new(slint::VecModel::from(
+                TEMPLATES
+                    .iter()
+                    .map(|template| slint::SharedString::from(template.name))
+                    .collect::<Vec<_>>(),
+            ))
+            .into(),
+            template: self.template as i32,
             running: self.running,
             progress: self.pace.floor,
             ceiling: self.pace.ceiling,
@@ -506,12 +528,26 @@ fn segment_captions(
     look: (f64, f64),
     style: usize,
     base: Option<&TextStyle>,
+    accent: Option<&TextStyle>,
 ) -> Vec<Command> {
     let speed = if speed.is_finite() && speed > 0.0 { speed } else { 1.0 };
     let at = |seconds: f64| start + seconds / speed;
     let mut out = Vec::new();
     if style == 2 {
-        let words: Vec<Word> = segments.iter().flat_map(timed_words).collect();
+        // each phrase's key word (its longest) in the template's accent
+        let mut words: Vec<Word> = Vec::new();
+        let mut keys: Vec<bool> = Vec::new();
+        for segment in segments {
+            let phrase = timed_words(segment);
+            let key = phrase
+                .iter()
+                .enumerate()
+                .filter(|(_, word)| word.text.chars().filter(|c| c.is_alphanumeric()).count() >= 4)
+                .max_by_key(|(index, word)| (word.text.chars().count(), usize::MAX - index))
+                .map(|(index, _)| index);
+            keys.extend((0..phrase.len()).map(|index| Some(index) == key));
+            words.extend(phrase);
+        }
         let big = (look.0, look.1 * WORD_SIZE);
         for (index, word) in words.iter().enumerate() {
             let begin = at(word.start);
@@ -523,7 +559,12 @@ fn segment_captions(
                 _ => spoken_end,
             };
             let duration = (end - begin).max(WORD_MIN);
-            out.push(keyed_caption(word.text.clone(), begin, duration, big, base, WORD_POP));
+            let keyed = accent.filter(|_| keys.get(index).copied().unwrap_or(false));
+            let (look, style) = match keyed {
+                Some(accent) => ((big.0, big.1 * ACCENT_SIZE), Some(accent)),
+                None => (big, base),
+            };
+            out.push(keyed_caption(word.text.clone(), begin, duration, look, style, WORD_POP));
         }
         return out;
     }
@@ -580,6 +621,66 @@ const WORD_GAP: f64 = 0.6;
 const WORD_MIN: f64 = 0.12;
 /// A word-by-word caption's size over a phrase's.
 const WORD_SIZE: f64 = 1.35;
+/// A key word's size over the other words'.
+const ACCENT_SIZE: f64 = 1.15;
+
+/// TetalCut: a caption template, as CapCut's caption looks - the words'
+/// font, fill, outline and box, and the key word's fill and outline when
+/// captions go word by word.
+struct Template {
+    name: &'static str,
+    font: &'static str,
+    weight: f64,
+    color: &'static str,
+    stroke: f64,
+    stroke_color: &'static str,
+    background: &'static str,
+    /// The key word's (fill, outline); the outline empty keeps the base's.
+    accent: Option<(&'static str, &'static str)>,
+}
+
+/// The templates, in the sheet's order; the sheet starts on the first. The
+/// last is the kept title look (Concat's own behaviour), with no fields of
+/// its own.
+const TEMPLATES: [Template; 10] = [
+    Template { name: "Clásico", font: "Montserrat", weight: 800.0, color: "#ffffff", stroke: 0.006, stroke_color: "#000000", background: "", accent: Some(("#ffe81a", "")) },
+    Template { name: "Amarillo viral", font: "Montserrat", weight: 900.0, color: "#ffe81a", stroke: 0.008, stroke_color: "#000000", background: "", accent: Some(("#ffffff", "")) },
+    Template { name: "Caja negra", font: "Montserrat", weight: 800.0, color: "#ffffff", stroke: 0.0, stroke_color: "#000000", background: "#000000cc", accent: Some(("#ffe81a", "")) },
+    Template { name: "Caja roja", font: "Montserrat", weight: 900.0, color: "#ffffff", stroke: 0.0, stroke_color: "#000000", background: "#e0182dee", accent: Some(("#ffe81a", "")) },
+    Template { name: "Neón", font: "Montserrat", weight: 900.0, color: "#ffffff", stroke: 0.006, stroke_color: "#ff2bd6", background: "", accent: Some(("#2bf0ff", "")) },
+    Template { name: "Impacto", font: "Anton", weight: 400.0, color: "#ffffff", stroke: 0.007, stroke_color: "#000000", background: "", accent: Some(("#ff3b30", "")) },
+    Template { name: "Bebas", font: "Bebas Neue", weight: 400.0, color: "#ffffff", stroke: 0.006, stroke_color: "#000000", background: "", accent: Some(("#ffe81a", "")) },
+    // AJ Media Studio's clients: La Ferre (white, key word yellow on navy),
+    // Buffet Imperial (white and orange, Montserrat)
+    Template { name: "La Ferre", font: "Montserrat", weight: 900.0, color: "#ffffff", stroke: 0.008, stroke_color: "#0b2a5b", background: "", accent: Some(("#ffd21f", "#0b2a5b")) },
+    Template { name: "Buffet Imperial", font: "Montserrat", weight: 800.0, color: "#ffffff", stroke: 0.007, stroke_color: "#e8650a", background: "", accent: Some(("#ff7a00", "#ffffff")) },
+    // the look titles were last given (Concat's own captions)
+    Template { name: "Título guardado", font: "", weight: 0.0, color: "", stroke: 0.0, stroke_color: "", background: "", accent: None },
+];
+
+/// A template's base look and key-word look. The kept title look has no
+/// key word of its own.
+fn template_styles(index: usize, kept: Option<&TextStyle>) -> (Option<TextStyle>, Option<TextStyle>) {
+    let Some(template) = TEMPLATES.get(index).filter(|template| !template.font.is_empty()) else {
+        return (kept.cloned(), None);
+    };
+    let base = TextStyle {
+        font_family: template.font.to_owned(),
+        font_weight: template.weight,
+        color: template.color.to_owned(),
+        stroke_width: template.stroke,
+        stroke_color: template.stroke_color.to_owned(),
+        shadow: template.background.is_empty(),
+        background: template.background.to_owned(),
+        ..TextStyle::default()
+    };
+    let accent = template.accent.map(|(fill, outline)| TextStyle {
+        color: fill.to_owned(),
+        stroke_color: if outline.is_empty() { base.stroke_color.clone() } else { outline.to_owned() },
+        ..base.clone()
+    });
+    (Some(base), accent)
+}
 
 /// A caption that pops in: scale from 75 % past full and back, opacity up,
 /// over `pop` seconds (at most 40 % of the caption).
@@ -765,7 +866,7 @@ mod tests {
             words: vec![w("Hola", 0.0, 0.4), w("a", 0.5, 0.6), w("todos", 2.0, 2.5)],
         }];
         let look = (0.35, 0.05);
-        let words = segment_captions(&segments, 10.0, 1.0, look, 2, None);
+        let words = segment_captions(&segments, 10.0, 1.0, look, 2, None, None);
         assert_eq!(words.len(), 3);
         let spans: Vec<(f64, f64)> = words
             .iter()
@@ -786,9 +887,9 @@ mod tests {
         assert!((spans[0].0 - 10.0).abs() < 1e-9 && (spans[0].1 - 0.5).abs() < 1e-9);
         assert!((spans[1].1 - (0.1 + WORD_LINGER)).abs() < 1e-9);
         assert!((spans[2].0 - 12.0).abs() < 1e-9);
-        let pop = segment_captions(&segments, 0.0, 2.0, look, 1, None);
+        let pop = segment_captions(&segments, 0.0, 2.0, look, 1, None, None);
         assert!(matches!(pop.as_slice(), [Command::AddKeyedTextClip { duration: Some(d), .. }] if (*d - 1.5).abs() < 1e-9));
-        let still = segment_captions(&segments, 0.0, 1.0, look, 0, None);
+        let still = segment_captions(&segments, 0.0, 1.0, look, 0, None, None);
         assert!(matches!(still.as_slice(), [Command::AddTextClip { .. }]));
         // a script's words are spread by length
         let plain = Segment {
@@ -800,5 +901,38 @@ mod tests {
         let spread = timed_words(&plain);
         assert_eq!(spread.len(), 2);
         assert!((spread[1].start - 1.0).abs() < 1e-9 && (spread[1].end - 2.0).abs() < 1e-9);
+    }
+
+    /// TetalCut: a template colours every caption, and word by word puts
+    /// each phrase's longest word in the accent, a little larger; the kept
+    /// look is the title style as it was.
+    #[test]
+    fn templates_colour_captions_and_accent_the_key_word() {
+        let ferre = TEMPLATES.iter().position(|t| t.name == "La Ferre").unwrap();
+        let (base, accent) = template_styles(ferre, None);
+        let (base, accent) = (base.unwrap(), accent.unwrap());
+        assert_eq!((base.color.as_str(), base.stroke_color.as_str()), ("#ffffff", "#0b2a5b"));
+        assert_eq!((accent.color.as_str(), accent.stroke_color.as_str()), ("#ffd21f", "#0b2a5b"));
+        let kept = TextStyle { color: "#123456".to_owned(), ..TextStyle::default() };
+        let (same, none) = template_styles(TEMPLATES.len() - 1, Some(&kept));
+        assert_eq!(same.unwrap().color, "#123456");
+        assert!(none.is_none());
+        let segments = vec![Segment {
+            start: 0.0,
+            end: 2.0,
+            text: "la mejor ferretería".to_owned(),
+            words: Vec::new(),
+        }];
+        let out = segment_captions(&segments, 0.0, 1.0, (0.35, 0.05), 2, Some(&base), Some(&accent));
+        let looks: Vec<(String, f64)> = out
+            .iter()
+            .map(|c| match c {
+                Command::AddKeyedTextClip { style: Some(style), .. } => (style.color.clone(), style.font_size),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(looks[0].0, "#ffffff");
+        assert_eq!(looks[2].0, "#ffd21f", "the longest word is the key");
+        assert!(looks[2].1 > looks[0].1);
     }
 }

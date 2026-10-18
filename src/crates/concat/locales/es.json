@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "Un título por frase hablada, ajustado al ritmo de las palabras, en la primera pista con espacio.",
   "captions.oneTitlePerSentence": "One title per sentence, held for as long as it takes to read, one after another on the first lane with room.",
   "captions.placement": "Posición",
+  "captions.template": "Plantilla",
   "captions.style": "Estilo",
   "captions.styleStill": "Fija",
   "captions.stylePop": "Con entrada",

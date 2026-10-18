@@ -294,6 +294,7 @@ export component App inherits Window {
     callback captions-placement-changed(index: int);
     callback captions-size-changed(index: int);
     callback captions-style-changed(index: int);
+    callback captions-template-changed(index: int);
     callback captions-begin();
     callback captions-cancel();
 
@@ -892,6 +893,7 @@ export component App inherits Window {
         placement-changed(index) => { root.captions-placement-changed(index); }
         size-changed(index) => { root.captions-size-changed(index); }
         style-changed(index) => { root.captions-style-changed(index); }
+        template-changed(index) => { root.captions-template-changed(index); }
         begin => { root.captions-begin(); }
         cancel => { root.captions-cancel(); }
     }

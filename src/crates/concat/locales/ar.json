@@ -17,6 +17,7 @@
   "captions.oneTitlePerPhrase": "عنوان لكل عبارة منطوقة، مقصوص على توقيت الكلمات نفسها، على أول مسار فيه متّسع.",
   "captions.oneTitlePerSentence": "عنوان لكل جملة، يبقى طوال المدة اللازمة لقراءته، واحدًا تلو الآخر على أول مسار فيه متّسع.",
   "captions.placement": "الموضع",
+  "captions.template": "Template",
   "captions.style": "Style",
   "captions.styleStill": "Still",
   "captions.stylePop": "Pop in",

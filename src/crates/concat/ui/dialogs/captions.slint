@@ -41,6 +41,9 @@ export struct CaptionsSheetData {
     size: int,
     /// TetalCut: 0 Still, 1 Pop in (phrase by phrase), 2 Word by word
     style: int,
+    /// TetalCut: the caption templates' names, and the chosen one's row.
+    templates: [string],
+    template: int,
     running: bool,
     /// 0..1: where the transcription surely is.
     progress: float,
@@ -71,6 +74,7 @@ export component CaptionsDialog inherits Modal {
     callback placement-changed(index: int);
     callback size-changed(index: int);
     callback style-changed(index: int);
+    callback template-changed(index: int);
     callback begin();
     callback cancel();
 
@@ -211,6 +215,15 @@ export component CaptionsDialog inherits Modal {
 
         if !root.data.running: DialogSection {
             title: I18n.t("captions.captions");
+
+            DialogRow {
+                label: I18n.t("captions.template");
+                Select {
+                    options: root.data.templates;
+                    current: root.data.template;
+                    changed(index) => { root.template-changed(index); }
+                }
+            }
 
             DialogRow {
                 label: I18n.t("captions.style");

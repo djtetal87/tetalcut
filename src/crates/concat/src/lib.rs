@@ -311,6 +311,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         editor.set_filter_groups(ModelRc::from(models.filter_groups.clone()));
         editor.set_audio_groups(ModelRc::from(models.audio_groups.clone()));
         editor.set_transition_groups(ModelRc::from(models.transition_groups.clone()));
+        editor.set_transition_pills(ModelRc::from(models.transition_pills.clone()));
+        editor.set_filter_pills(ModelRc::from(models.filter_pills.clone()));
         editor.set_applied_visual(ModelRc::from(models.applied_visual.clone()));
         editor.set_applied_audio(ModelRc::from(models.applied_audio.clone()));
         editor.set_visual_params(ModelRc::from(models.visual_params.clone()));

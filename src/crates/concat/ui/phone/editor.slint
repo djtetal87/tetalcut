@@ -984,6 +984,11 @@ export component PhoneEditor inherits Rectangle {
                 shelf: 0;
                 placeholder: I18n.t1("common.searchKind", I18n.t("mediaPane.filter"));
             }
+            CategoryPillBar {
+                categories: Editor.filter-pills;
+                current: Library.view(0).category;
+                picked(cat) => { Library.category-changed(0, cat); }
+            }
             ShelfGrid {
                 entries: Editor.catalogue-filters;
                 auditions: false;
@@ -1003,6 +1008,11 @@ export component PhoneEditor inherits Rectangle {
             ShelfSearch {
                 shelf: 3;
                 placeholder: I18n.t1("common.searchKind", I18n.t("mediaPane.transition"));
+            }
+            CategoryPillBar {
+                categories: Editor.transition-pills;
+                current: Library.view(3).category;
+                picked(cat) => { Library.category-changed(3, cat); }
             }
             ShelfGrid {
                 entries: Editor.catalogue-transitions;

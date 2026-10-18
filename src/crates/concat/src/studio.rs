@@ -563,6 +563,10 @@ pub struct Models {
     pub filter_groups: Rc<VecModel<SharedString>>,
     pub audio_groups: Rc<VecModel<SharedString>>,
     pub transition_groups: Rc<VecModel<SharedString>>,
+    /// TetalCut: a phone's pill bars for transitions and filters - "All",
+    /// then each shelf - where a desktop has a strip of shelves.
+    pub transition_pills: Rc<VecModel<SharedString>>,
+    pub filter_pills: Rc<VecModel<SharedString>>,
     /// The selected clip's two chains and their knobs.
     pub applied_visual: Rc<VecModel<AppliedEntryData>>,
     pub applied_audio: Rc<VecModel<AppliedEntryData>>,
@@ -645,6 +649,8 @@ impl Models {
             filter_groups: Rc::new(VecModel::default()),
             audio_groups: Rc::new(VecModel::default()),
             transition_groups: Rc::new(VecModel::default()),
+            transition_pills: Rc::new(VecModel::default()),
+            filter_pills: Rc::new(VecModel::default()),
             applied_visual: Rc::new(VecModel::default()),
             applied_audio: Rc::new(VecModel::default()),
             visual_params: Rc::new(VecModel::default()),
@@ -690,6 +696,13 @@ impl Models {
 
 /// Republish a list into a live model without resetting it: rows that did
 /// not change are not written, and the length changes a row at a time.
+/// "All", then the shelves: a phone's pill bar.
+fn pills(groups: &[SharedString]) -> Vec<SharedString> {
+    std::iter::once(SharedString::from("All"))
+        .chain(groups.iter().cloned())
+        .collect()
+}
+
 pub fn sync<T: Clone + PartialEq + 'static>(model: &VecModel<T>, next: Vec<T>) {
     let mut next = next;
     let shared = model.row_count().min(next.len());
@@ -1025,11 +1038,6 @@ fn new_title_style(prefs: &crate::prefs::Preferences) -> TextStyle {
 /// A label for a catalogue id: "black-white" reads as "Black White".
 /// One kind's shelves for the inspector: the shelf labels, in catalogue
 /// order, and every package on them with the index of its shelf.
-/// TetalCut: a phone's sheets have no strip of shelves to pick one from,
-/// so they list every package of the kind (sorted by shelf), not just the
-/// first shelf's: the iPhone showed three transitions of twenty-two.
-const PHONE: bool = cfg!(any(target_os = "android", target_os = "ios"));
-
 fn shelves(
     kind: PackageKind,
     view: &LibraryView,
@@ -1076,7 +1084,7 @@ fn shelves(
             name.to_lowercase().contains(&query) || description.to_lowercase().contains(&query)
         } else if !view.category.is_empty() {
             package.matches_category(&view.category)
-        } else if view.group >= 0 && !PHONE {
+        } else if view.group >= 0 {
             group as i32 == view.group
         } else {
             true
@@ -2179,6 +2187,15 @@ impl Studio {
         // would leave it on.
         studio.library[1].category = "All".to_owned();
         studio.library[1].group = -1;
+        // TetalCut: a phone has no strip of shelves, only a pill bar that
+        // starts on "All" - it listed the first shelf alone, three
+        // transitions of twenty-two
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            for shelf in [0, 3] {
+                studio.library[shelf].category = "All".to_owned();
+                studio.library[shelf].group = -1;
+            }
+        }
         studio
     }
 
@@ -9270,6 +9287,7 @@ impl Studio {
                 &self.look_art,
                 &self.card_paths,
             );
+            sync(&models.filter_pills, pills(&groups));
             sync(&models.filter_groups, groups);
             sync(&models.catalogue_filters, entries);
             let (groups, entries) = shelves(
@@ -9297,6 +9315,7 @@ impl Studio {
                 &self.look_art,
                 &self.card_paths,
             );
+            sync(&models.transition_pills, pills(&groups));
             sync(&models.transition_groups, groups);
             sync(&models.catalogue_transitions, entries);
             *self.shelf_stamp.borrow_mut() = Some(stamp);

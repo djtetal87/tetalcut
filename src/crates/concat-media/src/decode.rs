@@ -517,8 +517,17 @@ fn video_filter(
     // of a tag is named only when it is full: the frames carry no tag for
     // swscale to read, and untagged already means limited to it.
     let deep = deep_output(options, color);
+    // TetalCut: a wide or HDR picture's transfer and gamut by our LUT, not
+    // swscale's (see `sdr_lut`): the scale undoes only matrix and range.
+    let lut = match color {
+        Some(signal) if deep.is_none() && signal.is_wide() => signal
+            .deep_signal()
+            .and_then(crate::sdr_lut::cube_file),
+        _ => None,
+    };
     let convert = match (color, options.color_range) {
         (Some(signal), _) if deep.is_some() => signal.native_args(),
+        (Some(signal), _) if lut.is_some() => signal.native_args(),
         (Some(signal), _) if signal.is_wide() => signal.bt709_args(),
         (_, Some(range)) => format!(":in_range={}", range.scale_name()),
         (Some(signal), None) if signal.implied && signal.range == ffmpeg::color::Range::JPEG => {
@@ -527,6 +536,12 @@ fn video_filter(
         _ => String::new(),
     };
     parts.push(format!("scale={width}:{height}:flags=bilinear{convert}"));
+    if let Some(lut) = &lut {
+        parts.push(format!(
+            "format=rgb48le,lut3d=file={}:interp=tetrahedral",
+            crate::sdr_lut::filter_path(lut)
+        ));
+    }
     if let Some(chain) = &options.filter_chain {
         parts.push(chain.clone());
         parts.push(format!("scale={width}:{height}:flags=bilinear"));
@@ -1226,8 +1241,9 @@ mod tests {
         };
         assert!(hdr.is_wide() && hdr.is_hdr());
         let spec = video_filter(0, &options, 640, 360, Some(&hdr));
-        assert!(spec.starts_with("scale=640:360:flags=bilinear:in_primaries=bt2020:in_transfer=smpte2084:in_color_matrix=bt2020nc:in_range=tv:out_primaries=bt709"), "{spec}");
-        assert!(spec.contains("intent=perceptual,format=rgba"), "{spec}");
+        // TetalCut: the matrix and range by swscale, the rest by our LUT
+        assert!(spec.starts_with("scale=640:360:flags=bilinear:in_color_matrix=bt2020nc:in_range=tv,format=rgb48le,lut3d=file="), "{spec}");
+        assert!(spec.ends_with(":interp=tetrahedral,format=rgba"), "{spec}");
         // wide gamut with an SDR curve converts too, and the untagged
         // half of it is left to the frames
         let wide = ColorSignal {
@@ -1238,10 +1254,7 @@ mod tests {
             implied: false,
         };
         assert!(wide.is_wide() && !wide.is_hdr());
-        assert!(
-            video_filter(0, &options, 64, 64, Some(&wide))
-                .contains(":in_transfer=auto:in_color_matrix=auto:in_range=auto:")
-        );
+        assert!(video_filter(0, &options, 64, 64, Some(&wide)).contains("lut3d=file="));
     }
 
     /// With no tag and no override, the codec's convention names the
@@ -1366,7 +1379,7 @@ mod tests {
             implied: false,
         };
         assert!(
-            video_filter(0, &full, 640, 360, Some(&hdr_full)).contains(":in_range=pc:"),
+            video_filter(0, &full, 640, 360, Some(&hdr_full)).contains(":in_range=pc"),
             "a wide picture carries the range among its conversion terms"
         );
         assert_eq!(ColorRange::parse("PC"), Some(ColorRange::Full));

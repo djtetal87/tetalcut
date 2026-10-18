@@ -449,7 +449,12 @@ pub fn filmstrip_between(
     let instant = |index: usize| from + span * (index as f64 + 0.5) / f64::from(count);
     let mut tiles: Vec<Option<Frame>> = (0..count).map(|_| None).collect();
 
-    if span * fps <= STRIP_SEQUENTIAL_FRAMES {
+    // TetalCut: footage past 1080p (a phone's 4K, HDR above all) is read
+    // keyframe by keyframe even when short: decoding and converting every
+    // frame of it took a phone most of a minute per clip, and the strip
+    // and the waveform of every clip after it waited behind it.
+    let heavy = u64::from(video.width) * u64::from(video.height) > 2_100_000;
+    if span * fps <= STRIP_SEQUENTIAL_FRAMES && !heavy {
         read_through(path, from, fps, &instant, width, height, &mut tiles)?;
     } else {
         seek_each(path, &instant, width, height, &mut tiles)?;

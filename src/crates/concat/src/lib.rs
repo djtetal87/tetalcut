@@ -1241,6 +1241,15 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_sounds_import(on_window!(|state| {
         state.sounds_import();
     }));
+    editor.on_freesound_search(on_window!(|state, query: SharedString| {
+        state.freesound_search(query.as_str());
+    }));
+    editor.on_freesound_key(on_window!(|state, key: SharedString| {
+        state.freesound_key(key.as_str());
+    }));
+    editor.on_freesound_commercial_set(on_window!(|state, on: bool| {
+        state.freesound_commercial(on);
+    }));
     editor.on_curve_point(on_lanes!(|state,
                                      entry: i32,
                                      key: SharedString,

@@ -711,5 +711,13 @@
   "sounds.imported": "{0} sounds added to Mis sonidos",
   "sounds.loading": "Loading…",
   "sounds.importMine": "Add my sounds or music",
-  "sounds.folderHint": "Tap a sound to hear it, + to put it at the playhead. The bank is the TetalCut Sonidos folder (Documents on a Mac, Files on an iPhone): each folder you put there is a category. TetalCut's own sounds are free to use; for commercial songs, check the rights before publishing."
+  "sounds.folderHint": "Tap a sound to hear it, + to put it at the playhead. The bank is the TetalCut Sonidos folder (Documents on a Mac, Files on an iPhone): each folder you put there is a category. TetalCut's own sounds are free to use; for commercial songs, check the rights before publishing.",
+  "sounds.noResults": "Nothing found; try other words (in English there are many more)",
+  "sounds.searching": "Searching Freesound…",
+  "sounds.keyHint": "To search Freesound's thousands of sounds, paste your free API key (freesound.org/apiv2/apply). It is the same one you use in VideoTetal; it is kept on this device.",
+  "sounds.keyPlaceholder": "Freesound API key",
+  "sounds.keySave": "Save",
+  "sounds.searchPlaceholder": "whoosh, applause, laugh, cash register…",
+  "sounds.search": "Search",
+  "sounds.commercialOnly": "Only sounds for commercial use (CC0 and CC BY)"
 }

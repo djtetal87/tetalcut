@@ -13,6 +13,8 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
+use concat_host::freesound::{self, Hit};
+
 use super::*;
 
 /// The file kinds the bank lists.
@@ -21,6 +23,13 @@ const AUDIO: [&str; 10] = ["m4a", "mp3", "wav", "aac", "flac", "ogg", "aif", "ai
 const ALL: &str = "Todos";
 /// Files the user brought in through the bank's import go here.
 const MINE: &str = "Mis sonidos";
+/// The category pill that searches Freesound.
+const SEARCH: &str = "Buscar en Freesound";
+/// Where Freesound's sounds are kept once heard or placed.
+const FREESOUND: &str = "Freesound";
+/// A search result's row is named by this and its index.
+const HIT: &str = "fs:";
+
 /// Written once the built-in sounds have been put in the folder, so one the
 /// user deletes stays deleted.
 const SEEDED: &str = ".tetalcut-sonidos-v1";
@@ -33,13 +42,35 @@ struct Sound {
     path: String,
 }
 
-#[derive(Default)]
 struct Bank {
     open: bool,
     category: String,
     sounds: Vec<Sound>,
     /// What the user has asked to hear, while it is being brought in.
     pending_preview: Option<String>,
+    /// Freesound: the last search, its results, whether one is running,
+    /// only sounds a paid video may use, and why the last one failed.
+    query: String,
+    hits: Vec<Hit>,
+    searching: bool,
+    commercial: bool,
+    status: String,
+}
+
+impl Default for Bank {
+    fn default() -> Bank {
+        Bank {
+            open: false,
+            category: String::new(),
+            sounds: Vec::new(),
+            pending_preview: None,
+            query: String::new(),
+            hits: Vec::new(),
+            searching: false,
+            commercial: true,
+            status: String::new(),
+        }
+    }
 }
 
 thread_local! {
@@ -177,11 +208,19 @@ impl Studio {
     /// A sound tapped: heard (brought into the project's media first, as
     /// the bin's own preview needs); tapped again, paused.
     pub fn sound_preview(&mut self, path: &str) {
+        if path.starts_with(HIT) {
+            self.with_hit(path, |studio, file| studio.sound_preview(&file));
+            return;
+        }
         self.with_sound_media(path, |studio, media_id| studio.preview_media(&media_id, -1));
     }
 
     /// A sound's +: put at the playhead, on a sound lane.
     pub fn sound_add(&mut self, path: &str) {
+        if path.starts_with(HIT) {
+            self.with_hit(path, |studio, file| studio.sound_add(&file));
+            return;
+        }
         self.with_sound_media(path, |studio, media_id| {
             studio.close_source();
             let start = f64::from(studio.playhead.max(0.0));
@@ -190,6 +229,94 @@ impl Studio {
             }
             studio.notify(&t("sounds.added"), false);
         });
+    }
+
+    /// The Freesound key pasted in, and kept.
+    pub fn freesound_key(&mut self, key: &str) {
+        let key = key.trim();
+        self.prefs.freesound_key = (!key.is_empty()).then(|| key.to_owned());
+        self.prefs.save(&self.host.dirs);
+        BANK.with(|bank| bank.borrow_mut().status.clear());
+    }
+
+    /// Only sounds a paid video may use, or every licence.
+    pub fn freesound_commercial(&mut self, on: bool) {
+        let query = BANK.with(|bank| {
+            let mut bank = bank.borrow_mut();
+            bank.commercial = on;
+            bank.query.clone()
+        });
+        if !query.is_empty() {
+            self.freesound_search(&query);
+        }
+    }
+
+    /// Searches Freesound on a worker.
+    pub fn freesound_search(&mut self, query: &str) {
+        let key = self.prefs.freesound_key.clone().unwrap_or_default();
+        let commercial = BANK.with(|bank| {
+            let mut bank = bank.borrow_mut();
+            bank.query = query.trim().to_owned();
+            bank.searching = !bank.query.is_empty();
+            bank.status.clear();
+            bank.commercial
+        });
+        let query = query.to_owned();
+        spawn(
+            move || freesound::search(&key, &query, commercial),
+            |_, _, _, result| {
+                BANK.with(|bank| {
+                    let mut bank = bank.borrow_mut();
+                    bank.searching = false;
+                    match result {
+                        Ok(hits) => {
+                            bank.status = if hits.is_empty() && !bank.query.is_empty() {
+                                t("sounds.noResults")
+                            } else {
+                                String::new()
+                            };
+                            bank.hits = hits;
+                        }
+                        Err(error) => {
+                            bank.hits.clear();
+                            bank.status = error;
+                        }
+                    }
+                });
+            },
+        );
+    }
+
+    /// Runs `then` with the file of search result `row` ("fs:<index>"),
+    /// downloading it into the bank's Freesound folder first.
+    fn with_hit(&mut self, row: &str, then: impl FnOnce(&mut Studio, String) + Send + 'static) {
+        let Some(hit) = row
+            .strip_prefix(HIT)
+            .and_then(|index| index.parse::<usize>().ok())
+            .and_then(|index| BANK.with(|bank| bank.borrow().hits.get(index).cloned()))
+        else {
+            return;
+        };
+        let folder = bank_root(&self.host.dirs.config).join(FREESOUND);
+        let done = freesound::path_of(&folder, &hit);
+        if done.exists() {
+            then(self, done.to_string_lossy().into_owned());
+            return;
+        }
+        BANK.with(|bank| bank.borrow_mut().pending_preview = Some(row.to_owned()));
+        spawn(
+            move || freesound::download(&folder, &hit),
+            move |studio, _, _, result| {
+                BANK.with(|bank| bank.borrow_mut().pending_preview = None);
+                match result {
+                    Ok(path) => {
+                        studio.sounds_refresh();
+                        then(studio, path.to_string_lossy().into_owned());
+                    }
+                    Err(error) => studio.notify(&error, true),
+                }
+            },
+        );
     }
 
     /// The user's own files brought into the bank's "Mis sonidos".
@@ -270,7 +397,7 @@ impl Studio {
         BANK.with(|bank| {
             let bank = bank.borrow();
             editor.set_sounds_shown(bank.open);
-            let mut categories: Vec<SharedString> = vec![ALL.into()];
+            let mut categories: Vec<SharedString> = vec![ALL.into(), SEARCH.into()];
             for sound in &bank.sounds {
                 if !categories.iter().any(|c| c.as_str() == sound.category) {
                     categories.push(sound.category.as_str().into());
@@ -278,6 +405,35 @@ impl Studio {
             }
             sync(&models.sound_categories, categories);
             editor.set_sound_category(bank.category.as_str().into());
+            let searching = bank.category == SEARCH;
+            editor.set_freesound_mode(searching);
+            editor.set_freesound_key_set(self.prefs.freesound_key.as_ref().is_some_and(|k| !k.is_empty()));
+            editor.set_freesound_commercial(bank.commercial);
+            editor.set_freesound_status(
+                if bank.searching { t("sounds.searching") } else { bank.status.clone() }.into(),
+            );
+            if searching {
+                let rows: Vec<SoundRowData> = bank
+                    .hits
+                    .iter()
+                    .enumerate()
+                    .map(|(index, hit)| {
+                        let row = format!("{}{}", HIT, index);
+                        SoundRowData {
+                            name: hit.name.as_str().into(),
+                            category: format!("{} · {} · {:.1} s", hit.license, hit.author, hit.seconds)
+                                .into(),
+                            playing: playing.as_deref().is_some_and(|path| {
+                                path.ends_with(&format!("({}).mp3", hit.id))
+                            }),
+                            loading: bank.pending_preview.as_deref() == Some(row.as_str()),
+                            path: row.into(),
+                        }
+                    })
+                    .collect();
+                sync(&models.sounds, rows);
+                return;
+            }
             let rows: Vec<SoundRowData> = bank
                 .sounds
                 .iter()

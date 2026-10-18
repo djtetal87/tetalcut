@@ -247,6 +247,15 @@ export global Editor {
     callback sound-preview(path: string);
     callback sound-add(path: string);
     callback sounds-import();
+    /// Freesound search, in the bank: the search pill chosen, a key kept,
+    /// commercial-use sounds only, what the search is doing or why not.
+    in-out property <bool> freesound-mode;
+    in-out property <bool> freesound-key-set;
+    in-out property <bool> freesound-commercial;
+    in-out property <string> freesound-status;
+    callback freesound-search(query: string);
+    callback freesound-key(key: string);
+    callback freesound-commercial-set(on: bool);
     /// The Adjust tab's wheels and curves, and the picture chain's, a
     /// group a link: see `grading.slint`. A wheel's puck and master are set
     /// as knobs, `<key>.x`, `<key>.y` and `<key>.m`; a curve's points by

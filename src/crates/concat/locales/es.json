@@ -711,5 +711,13 @@
   "sounds.imported": "{0} sonidos agregados a Mis sonidos",
   "sounds.loading": "Cargando…",
   "sounds.importMine": "Agregar mis sonidos o música",
-  "sounds.folderHint": "Toca un sonido para escucharlo y + para ponerlo en el cursor. El banco es la carpeta TetalCut Sonidos (en Documentos del Mac y en Archivos del iPhone): cada carpeta que pongas ahí es una categoría. Los sonidos de TetalCut son libres de uso; si usas canciones comerciales, revisa los derechos antes de publicar."
+  "sounds.folderHint": "Toca un sonido para escucharlo y + para ponerlo en el cursor. El banco es la carpeta TetalCut Sonidos (en Documentos del Mac y en Archivos del iPhone): cada carpeta que pongas ahí es una categoría. Los sonidos de TetalCut son libres de uso; si usas canciones comerciales, revisa los derechos antes de publicar.",
+  "sounds.noResults": "No se encontró nada; prueba otras palabras (en inglés hay muchos más)",
+  "sounds.searching": "Buscando en Freesound…",
+  "sounds.keyHint": "Para buscar entre los miles de sonidos de Freesound, pega tu clave gratuita (freesound.org/apiv2/apply). Es la misma que usas en VideoTetal y queda guardada en este equipo.",
+  "sounds.keyPlaceholder": "Clave de Freesound",
+  "sounds.keySave": "Guardar",
+  "sounds.searchPlaceholder": "whoosh, applause, laugh, cash register…",
+  "sounds.search": "Buscar",
+  "sounds.commercialOnly": "Solo sonidos de uso comercial (CC0 y CC BY)"
 }

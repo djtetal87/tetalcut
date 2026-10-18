@@ -11,7 +11,7 @@ import { Theme } from "../theme/theme.slint";
 import { Section, SectionBody, SectionHeader } from "../primitives/panel.slint";
 import { Button, Modal } from "../primitives/modal.slint";
 import { Glyph, Icon } from "../icons.slint";
-import { Note } from "controls.slint";
+import { Note, Switch } from "controls.slint";
 import { CurveEditor } from "grading.slint";
 import { CategoryPillBar } from "../workspace/media-pane.slint";
 import { Editor } from "../editor.slint";
@@ -182,6 +182,49 @@ component RoundIcon inherits Rectangle {
     }
 }
 
+/// TetalCut: a line to type in, answered on Enter or by its button.
+component QueryField inherits HorizontalLayout {
+    in property <string> placeholder;
+    in property <string> action;
+    in property <bool> secret;
+    callback accepted(text: string);
+
+    spacing: 6px;
+
+    Rectangle {
+        horizontal-stretch: 1;
+        height: 34px;
+        border-radius: Theme.r-sm;
+        background: Theme.field;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.accent : Theme.line;
+        clip: true;
+
+        input := TextInput {
+            x: 8px;
+            y: (parent.height - self.height) / 2;
+            width: parent.width - 16px;
+            color: Theme.fg;
+            font-size: Theme.fs-lg;
+            single-line: true;
+            input-type: root.secret ? InputType.password : InputType.text;
+            accepted => { root.accepted(self.text); }
+        }
+        if input.text == "" && !input.has-focus: Text {
+            x: 8px;
+            y: (parent.height - self.height) / 2;
+            text: root.placeholder;
+            color: Theme.fg-dim;
+            font-size: Theme.fs-lg;
+        }
+    }
+    Button {
+        label: root.action;
+        primary: true;
+        clicked => { root.accepted(input.text); }
+    }
+}
+
 /// TetalCut: the sound bank - music and effects by category; a tap hears
 /// a sound, + puts it at the playhead.
 export component SoundsDialog inherits Modal {
@@ -199,6 +242,52 @@ export component SoundsDialog inherits Modal {
             categories: Editor.sound-categories;
             current: Editor.sound-category;
             picked(name) => { Editor.sound-category-pick(name); }
+        }
+
+        // Freesound: the key once, then the search
+        if Editor.freesound-mode && !Editor.freesound-key-set: VerticalLayout {
+            spacing: 6px;
+            Text {
+                text: I18n.t("sounds.keyHint");
+                color: Theme.fg;
+                font-size: Theme.fs;
+                wrap: word-wrap;
+            }
+            QueryField {
+                placeholder: I18n.t("sounds.keyPlaceholder");
+                action: I18n.t("sounds.keySave");
+                secret: true;
+                accepted(text) => { Editor.freesound-key(text); }
+            }
+        }
+        if Editor.freesound-mode && Editor.freesound-key-set: VerticalLayout {
+            spacing: 6px;
+            QueryField {
+                placeholder: I18n.t("sounds.searchPlaceholder");
+                action: I18n.t("sounds.search");
+                accepted(text) => { Editor.freesound-search(text); }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    horizontal-stretch: 1;
+                    text: I18n.t("sounds.commercialOnly");
+                    color: Theme.fg;
+                    font-size: Theme.fs;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                Switch {
+                    checked: Editor.freesound-commercial;
+                    toggled(on) => { Editor.freesound-commercial-set(on); }
+                }
+            }
+        }
+        if Editor.freesound-mode && Editor.freesound-status != "": Text {
+            text: Editor.freesound-status;
+            color: Theme.fg-dim;
+            font-size: Theme.fs-sm;
+            wrap: word-wrap;
         }
 
         Flickable {

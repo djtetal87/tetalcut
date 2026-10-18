@@ -24,6 +24,7 @@ pub mod pool;
 pub mod prefetch;
 pub mod probe;
 pub mod samples;
+pub mod sdr_lut;
 pub mod treat;
 
 pub use decode::{ColorRange, ColorSignal, DecodeOptions, Decoder, FrameSource, SeekableSource};

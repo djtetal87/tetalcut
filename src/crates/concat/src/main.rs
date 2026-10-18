@@ -37,6 +37,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // export is saved to Photos (Concat's phone hooks, answered by UIKit)
     #[cfg(target_os = "ios")]
     {
+        concat_ios::setup_audio();
         concat::install_file_picker(Box::new(concat_ios::pick));
         concat::install_export_publisher(concat::ExportPublisher {
             folder: concat_ios::PHOTOS_FOLDER.into(),

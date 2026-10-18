@@ -98,7 +98,14 @@ impl Default for ExportPane {
         Self {
             open: false,
             name: "Untitled".into(),
-            folder: home_folder("Movies"),
+            // TetalCut: an iPhone app may only write inside Documents (and
+            // Library, tmp) of its own folder: "Movies" there cannot be made.
+            // The finished file then goes on to Photos (concat-ios).
+            folder: if cfg!(target_os = "ios") {
+                home_folder("Documents/TetalCut Exports")
+            } else {
+                home_folder("Movies")
+            },
             resolution: 2,
             rate: 0,
             custom: false,

@@ -24,6 +24,33 @@ unsafe extern "C" {}
 unsafe extern "C" {}
 #[link(name = "UniformTypeIdentifiers", kind = "framework")]
 unsafe extern "C" {}
+#[link(name = "AVFAudio", kind = "framework")]
+unsafe extern "C" {}
+
+/// Sound that plays with the ring/silent switch on silent, as a video
+/// editor's must: the audio session's Playback category (the default,
+/// SoloAmbient, is silenced by the switch, and cpal does not set one).
+pub fn setup_audio() {
+    let Ok(session) = class(c"AVAudioSession") else {
+        log::warn!("no AVAudioSession: sound follows the silent switch");
+        return;
+    };
+    unsafe {
+        let shared: Option<Retained<AnyObject>> = msg_send![session, sharedInstance];
+        let Some(shared) = shared else { return };
+        let mut error: *mut AnyObject = std::ptr::null_mut();
+        // the value of AVAudioSessionCategoryPlayback
+        let set: bool = msg_send![&*shared, setCategory: &*ns("AVAudioSessionCategoryPlayback"), error: &mut error];
+        if !set {
+            log::warn!("could not set the audio session's category");
+        }
+        let mut error: *mut AnyObject = std::ptr::null_mut();
+        let active: bool = msg_send![&*shared, setActive: true, error: &mut error];
+        if !active {
+            log::warn!("could not activate the audio session");
+        }
+    }
+}
 
 /// Where a published export goes, as the export sheet names it.
 pub const PHOTOS_FOLDER: &str = "Fotos";

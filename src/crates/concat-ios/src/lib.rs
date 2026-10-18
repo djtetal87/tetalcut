@@ -11,6 +11,8 @@
 //!   use it, and those paths come back.
 //! - [`publish`]: a finished export saved to Photos (add-only access), and
 //!   the copy in the app's folder removed.
+//! - [`setup_audio`]: the audio session a video editor needs (sound with the
+//!   silent switch on).
 //!
 //! Classes are reached by name and messaged dynamically: objc2's generated
 //! PhotosUI bindings cover the Mac only.
@@ -19,4 +21,4 @@
 mod imp;
 
 #[cfg(target_os = "ios")]
-pub use imp::{PHOTOS_FOLDER, pick, publish};
+pub use imp::{PHOTOS_FOLDER, pick, publish, setup_audio};

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    AppliedFilter, AudioTrack, Clip, ClipKind, ColorRange, ColorSpace, Crop, CustomFont, Cutout,
+    AppliedFilter, AudioTrack, Clip, ClipKey, ClipKind, ColorRange, ColorSpace, Crop, CustomFont, Cutout,
     CutoutMode, Enhanced, KeyEase, KeyProperty, MediaItem, MediaKind, MediaOrigin, Project,
     ShapeStyle, SpeedPoint, Stroke, TextStyle, Timeline, Track, Transition, VideoSettings,
 };
@@ -321,6 +321,24 @@ pub enum Command {
         /// SetClipTransform. Lower thirds are made of this.
         #[serde(default)]
         offset_y: Option<f64>,
+    },
+    /// TetalCut: a caption title with its own movement - an
+    /// [`Command::AddTextClip`] above the picture whose keys (an entrance:
+    /// a pop or a fade) land with it, so a run of captions is one batch.
+    AddKeyedTextClip {
+        /// Timeline position in seconds, floored at 0.
+        start: f64,
+        /// The words and their look.
+        style: Option<TextStyle>,
+        /// Seconds on the timeline.
+        #[serde(default)]
+        duration: Option<f64>,
+        /// Vertical placement as a frame-height fraction.
+        #[serde(default)]
+        offset_y: Option<f64>,
+        /// The clip's keys, as [`Clip::keys`].
+        #[serde(default)]
+        keys: Vec<ClipKey>,
     },
     /// Places a shape: a clip with no media behind it that draws one
     /// figure over the picture, minting a "c" id. Lands the way a title
@@ -952,6 +970,20 @@ impl Command {
             Command::AddLayerClip {
                 start, duration, ..
             } => bad([*start]) || bad(*duration),
+            Command::AddKeyedTextClip {
+                start,
+                duration,
+                offset_y,
+                keys,
+                ..
+            } => {
+                bad([*start])
+                    || bad(*duration)
+                    || bad(*offset_y)
+                    || keys
+                        .iter()
+                        .any(|key| bad([key.at, key.value]) || bad(key.ease.0))
+            }
             Command::SetClipSpeedCurve { curve, .. } => bad(curve
                 .iter()
                 .flatten()
@@ -1080,6 +1112,7 @@ pub fn apply(
         command @ (Command::AddClip { .. }
         | Command::AddClipAtFirstFree { .. }
         | Command::AddTextClip { .. }
+        | Command::AddKeyedTextClip { .. }
         | Command::AddShapeClip { .. }
         | Command::AddLayerClip { .. }
         | Command::MoveClips { .. }

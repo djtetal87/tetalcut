@@ -39,6 +39,8 @@ export struct CaptionsSheetData {
     placement: int,
     /// 0 Small, 1 Medium, 2 Large
     size: int,
+    /// TetalCut: 0 Still, 1 Pop in (phrase by phrase), 2 Word by word
+    style: int,
     running: bool,
     /// 0..1: where the transcription surely is.
     progress: float,
@@ -68,6 +70,7 @@ export component CaptionsDialog inherits Modal {
     callback model-changed(index: int);
     callback placement-changed(index: int);
     callback size-changed(index: int);
+    callback style-changed(index: int);
     callback begin();
     callback cancel();
 
@@ -210,6 +213,15 @@ export component CaptionsDialog inherits Modal {
             title: I18n.t("captions.captions");
 
             DialogRow {
+                label: I18n.t("captions.style");
+                SegmentedControl {
+                    options: [I18n.t("captions.styleStill"), I18n.t("captions.stylePop"), I18n.t("captions.styleWords")];
+                    current: root.data.style;
+                    changed(index) => { root.style-changed(index); }
+                }
+            }
+
+            DialogRow {
                 label: I18n.t("captions.placement");
                 SegmentedControl {
                     options: [I18n.t("common.bottom"), I18n.t("captions.centre"), I18n.t("common.top")];
@@ -228,7 +240,11 @@ export component CaptionsDialog inherits Modal {
             }
 
             Text {
-                text: root.from-voice
+                text: root.data.style == 2
+                    ? I18n.t("captions.styleWordsHint")
+                    : root.data.style == 1
+                    ? I18n.t("captions.stylePopHint")
+                    : root.from-voice
                     ? I18n.t("captions.oneTitlePerPhrase")
                     : I18n.t("captions.oneTitlePerSentence");
                 color: Theme.fg-dim;

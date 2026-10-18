@@ -107,6 +107,43 @@ pub(super) fn apply(
             })
         }
 
+        Command::AddKeyedTextClip {
+            start,
+            style,
+            duration,
+            offset_y,
+            keys,
+        } => {
+            let outcome = apply(
+                project,
+                mint,
+                Command::AddTextClip {
+                    track_id: None,
+                    above: true,
+                    start,
+                    style,
+                    duration,
+                    offset_y,
+                },
+            )?;
+            if let Some(id) = &outcome.created_id {
+                let timeline = project.active_mut();
+                if let Some(slot) = timeline.clips.iter_mut().find(|clip| &clip.id == id) {
+                    let clip = Arc::make_mut(slot);
+                    clip.keys = keys
+                        .into_iter()
+                        .filter(|key| key.at.is_finite() && key.value.is_finite())
+                        .map(|key| ClipKey {
+                            at: key.at.clamp(0.0, 1.0),
+                            ..key
+                        })
+                        .collect();
+                    clip.sort_keys();
+                }
+            }
+            Ok(outcome)
+        }
+
         Command::AddShapeClip {
             track_id,
             above,

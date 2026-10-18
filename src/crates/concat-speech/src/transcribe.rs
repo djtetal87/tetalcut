@@ -178,6 +178,22 @@ pub struct Segment {
     pub end: f64,
     /// What was said.
     pub text: String,
+    /// TetalCut: each word and when it is said (whisper's token times), for
+    /// captions that show a word at a time or pop in phrase by phrase.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub words: Vec<Word>,
+}
+
+/// One word of a [`Segment`], in seconds relative to the window's start.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Word {
+    /// Seconds from the window's start.
+    pub start: f64,
+    /// Seconds from the window's start.
+    pub end: f64,
+    /// The word, with its punctuation.
+    pub text: String,
 }
 
 /// What to transcribe.
@@ -406,6 +422,8 @@ impl Transcriber {
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
         params.set_suppress_blank(true);
+        // TetalCut: a time for every token, which the words are made of
+        params.set_token_timestamps(true);
         // The raw hooks, not `set_abort_callback_safe`. whisper-rs 0.16's
         // safe one hands whisper a pointer to a boxed trait object with a
         // trampoline typed for the closure itself, so whisper reads the
@@ -449,7 +467,9 @@ impl Transcriber {
                 let start = segment.start_timestamp() as f64 / 100.0;
                 let end = segment.end_timestamp() as f64 / 100.0;
                 let text = segment.to_str_lossy().ok()?.trim().to_owned();
-                keep_segment(start, end, text)
+                let mut kept = keep_segment(start, end, text)?;
+                kept.words = segment_words(&segment, start, end);
+                Some(kept)
             })
             .collect())
     }
@@ -472,7 +492,78 @@ fn keep_segment(start: f64, end: f64, text: String) -> Option<Segment> {
     if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
         return None;
     }
-    (end > start).then_some(Segment { start, end, text })
+    (end > start).then_some(Segment {
+        start,
+        end,
+        text,
+        words: Vec::new(),
+    })
+}
+
+/// A segment's words from its tokens: whisper's byte pieces joined into
+/// words at each leading space (a letter split across two tokens, as an
+/// accented one can be, is joined back before it is read as text), timed
+/// from the first piece's start to the last's end, kept inside the segment.
+fn segment_words(
+    segment: &whisper_rs::WhisperSegment<'_>,
+    seg_start: f64,
+    seg_end: f64,
+) -> Vec<Word> {
+    let mut pieces: Vec<(Vec<u8>, f64, f64)> = Vec::new();
+    for index in 0..segment.n_tokens() {
+        let Some(token) = segment.get_token(index) else { continue };
+        let Ok(bytes) = token.to_bytes() else { continue };
+        // special tokens: [_BEG_], [_TT_150], <|en|>, …
+        if bytes.starts_with(b"[_") || bytes.starts_with(b"<|") {
+            continue;
+        }
+        let data = token.token_data();
+        let (t0, t1) = (data.t0 as f64 / 100.0, data.t1 as f64 / 100.0);
+        pieces.push((bytes.to_vec(), t0, t1));
+    }
+    words_from_pieces(&pieces, seg_start, seg_end)
+}
+
+/// [`segment_words`] past whisper: `(bytes, start, end)` pieces into words.
+fn words_from_pieces(pieces: &[(Vec<u8>, f64, f64)], seg_start: f64, seg_end: f64) -> Vec<Word> {
+    let mut words: Vec<(Vec<u8>, f64, f64)> = Vec::new();
+    for (bytes, t0, t1) in pieces {
+        let starts_word = bytes.first() == Some(&b' ') || words.is_empty();
+        match words.last_mut() {
+            Some(last) if !starts_word => {
+                last.0.extend_from_slice(bytes);
+                last.2 = last.2.max(*t1);
+            }
+            _ => words.push((bytes.clone(), *t0, *t1)),
+        }
+    }
+    let mut out: Vec<Word> = Vec::new();
+    for (bytes, t0, t1) in words {
+        let text = String::from_utf8_lossy(&bytes).trim().to_owned();
+        if text.is_empty() {
+            continue;
+        }
+        // punctuation on its own rides with the word before it
+        if !text.chars().any(char::is_alphanumeric) {
+            if let Some(last) = out.last_mut() {
+                last.text.push_str(&text);
+                continue;
+            }
+        }
+        let start = t0.clamp(seg_start, seg_end);
+        let end = t1.clamp(start, seg_end);
+        out.push(Word { start, end, text });
+    }
+    // a word never starts before the one before it
+    for i in 1..out.len() {
+        if out[i].start < out[i - 1].start {
+            out[i].start = out[i - 1].start;
+        }
+        if out[i].end < out[i].start {
+            out[i].end = out[i].start;
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -488,6 +579,31 @@ mod tests {
         assert!(keep_segment(2.5, 2.5, "degenerate".to_owned()).is_none());
         assert!(keep_segment(3.0, 4.0, "[BLANK_AUDIO]".to_owned()).is_none());
         assert!(keep_segment(3.0, 4.0, String::new()).is_none());
+    }
+
+    #[test]
+    fn pieces_join_into_timed_words() {
+        let p = |t: &str, a: f64, b: f64| (t.as_bytes().to_vec(), a, b);
+        // "canción" split inside its accented letter, punctuation on its own
+        let o = "ó".as_bytes();
+        let pieces = vec![
+            p(" Hola", 1.0, 1.3),
+            p(",", 1.3, 1.35),
+            p(" esta", 1.4, 1.6),
+            p(" canci", 1.7, 1.9),
+            (o[..1].to_vec(), 1.9, 1.95),
+            (o[1..].iter().copied().chain(b"n".iter().copied()).collect(), 1.95, 2.2),
+            p(".", 2.2, 2.25),
+        ];
+        let words = words_from_pieces(&pieces, 1.0, 2.3);
+        let texts: Vec<&str> = words.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(texts, ["Hola,", "esta", "canción."]);
+        assert_eq!((words[0].start, words[0].end), (1.0, 1.35));
+        assert_eq!((words[2].start, words[2].end), (1.7, 2.25));
+        // kept inside the segment, and in order
+        let words = words_from_pieces(&[p(" a", 0.0, 9.0), p(" b", 0.5, 0.6)], 1.0, 2.0);
+        assert_eq!((words[0].start, words[0].end), (1.0, 2.0));
+        assert!(words[1].start >= words[0].start);
     }
 
     #[test]

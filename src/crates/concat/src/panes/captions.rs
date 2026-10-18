@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use concat_project::Command;
+use concat_project::{Command, motion};
 use concat_project::model::{ClipKey, KeyEase, KeyProperty, TextStyle};
 use concat_speech::JobStage;
 use concat_speech::transcribe::{Segment, Word};
@@ -58,6 +58,10 @@ pub enum CaptionsMsg {
     StyleChanged(i32),
     /// TetalCut: the caption template (colours, outline, box, font).
     TemplateChanged(i32),
+    /// TetalCut: every caption in capitals.
+    UppercaseToggled(bool),
+    /// TetalCut: the captions' movement while on screen (see [`LOOPS`]).
+    MotionChanged(i32),
     /// Run the pass the sheet describes.
     Begin,
     Cancel,
@@ -79,6 +83,9 @@ struct Subject {
     style: usize,
     /// The template chosen when the run began.
     template: usize,
+    /// Capitals and movement, as chosen when the run began.
+    uppercase: bool,
+    motion: usize,
     /// The transcriber model, and the thirty-second windows whisper reads
     /// the sound in: what the run's timing is kept by.
     model: String,
@@ -115,6 +122,10 @@ pub struct CaptionsPane {
     style_chosen: bool,
     /// TetalCut: row in [`TEMPLATES`], Clásico first. Kept for the session.
     pub template: usize,
+    /// TetalCut: every caption in capitals. Kept for the session.
+    pub uppercase: bool,
+    /// TetalCut: row in [`concat_project::motion::LOOPS`]. Kept for the session.
+    pub motion: usize,
     pub running: bool,
     /// How far the running transcription looks.
     pub pace: Pace,
@@ -168,6 +179,10 @@ impl CaptionsPane {
             CaptionsMsg::TemplateChanged(index) => {
                 self.template = (index.max(0) as usize).min(TEMPLATES.len() - 1);
             }
+            CaptionsMsg::UppercaseToggled(on) => self.uppercase = on,
+            CaptionsMsg::MotionChanged(index) => {
+                self.motion = (index.max(0) as usize).min(motion::LOOPS.len() - 1);
+            }
             CaptionsMsg::StyleChanged(index) => {
                 self.style = (index.max(0) as usize).min(2);
                 self.style_chosen = true;
@@ -204,7 +219,11 @@ impl CaptionsPane {
                             subject.start,
                             subject.speed,
                             subject.look,
-                            subject.style,
+                            Finish {
+                                style: subject.style,
+                                uppercase: subject.uppercase,
+                                motion: subject.motion,
+                            },
                             base.as_ref(),
                             accent.as_ref(),
                         );
@@ -251,6 +270,8 @@ impl CaptionsPane {
             style: if self.style_chosen { self.style } else { 1 },
             style_chosen: self.style_chosen,
             template: self.template,
+            uppercase: self.uppercase,
+            motion: self.motion,
             timings: std::mem::take(&mut self.timings),
             ..CaptionsPane::default()
         };
@@ -262,6 +283,15 @@ impl CaptionsPane {
             CAPTION_OFFSETS[self.placement.min(2)],
             CAPTION_SIZES[self.size.min(2)],
         )
+    }
+
+    /// How the captions are finished: style, capitals, movement.
+    fn finish(&self) -> Finish {
+        Finish {
+            style: self.style,
+            uppercase: self.uppercase,
+            motion: self.motion,
+        }
     }
 
     /// The script as titles, one after another from the playhead.
@@ -294,7 +324,7 @@ impl CaptionsPane {
             f64::from(studio.playhead),
             1.0,
             look,
-            self.style,
+            self.finish(),
             base.as_ref(),
             accent.as_ref(),
         );
@@ -357,6 +387,8 @@ impl CaptionsPane {
             look: self.look(),
             style: self.style,
             template: self.template,
+            uppercase: self.uppercase,
+            motion: self.motion,
             model,
             windows,
         });
@@ -409,6 +441,15 @@ impl CaptionsPane {
             ))
             .into(),
             template: self.template as i32,
+            uppercase: self.uppercase,
+            motions: std::rc::Rc::new(slint::VecModel::from(
+                motion::LOOPS
+                    .iter()
+                    .map(|name| slint::SharedString::from(*name))
+                    .collect::<Vec<_>>(),
+            ))
+            .into(),
+            motion: self.motion as i32,
             running: self.running,
             progress: self.pace.floor,
             ceiling: self.pace.ceiling,
@@ -522,6 +563,70 @@ fn caption_style(text: String, font_size: f64, base: Option<&TextStyle>) -> Text
 ///   next one is (or a moment after it ends, across a pause), each popping
 ///   in; a little larger than a phrase.
 fn segment_captions(
+    segments: &[Segment],
+    start: f64,
+    speed: f64,
+    look: (f64, f64),
+    finish: Finish,
+    base: Option<&TextStyle>,
+    accent: Option<&TextStyle>,
+) -> Vec<Command> {
+    let mut out = styled_captions(segments, start, speed, look, finish.style, base, accent);
+    for command in &mut out {
+        finish_caption(command, finish);
+    }
+    out
+}
+
+/// TetalCut: how a run's captions are finished on top of their style.
+#[derive(Clone, Copy, Debug, Default)]
+struct Finish {
+    style: usize,
+    uppercase: bool,
+    motion: usize,
+}
+
+/// A caption in capitals when asked, and moving while on screen when a
+/// movement was chosen (word by word words are too short to move).
+fn finish_caption(command: &mut Command, finish: Finish) {
+    let (style, duration, offset_y, keys) = match command {
+        Command::AddTextClip { style, duration, offset_y, .. } => (style, *duration, *offset_y, None),
+        Command::AddKeyedTextClip { style, duration, offset_y, keys, .. } => {
+            (style, *duration, *offset_y, Some(keys))
+        }
+        _ => return,
+    };
+    if finish.uppercase {
+        if let Some(style) = style.as_mut() {
+            style.content = style.content.to_uppercase();
+        }
+    }
+    if finish.motion == 0 || finish.style == 2 {
+        return;
+    }
+    let duration = duration.unwrap_or(1.0);
+    let rest = motion::Rest {
+        offset_y: offset_y.unwrap_or(0.0),
+        ..motion::Rest::default()
+    };
+    let moving = motion::loop_keys(finish.motion, duration, &rest);
+    match keys {
+        Some(keys) => {
+            // the pop keeps the scale; the movement takes what the pop leaves
+            let popped: Vec<_> = keys.iter().map(|key| key.property).collect();
+            keys.extend(moving.into_iter().filter(|key| !popped.contains(&key.property)));
+        }
+        None => {
+            let Command::AddTextClip { start, style, duration, offset_y, .. } = command.clone() else {
+                return;
+            };
+            *command = Command::AddKeyedTextClip { start, style, duration, offset_y, keys: moving };
+        }
+    }
+}
+
+/// The captions of a style, before they are finished.
+fn styled_captions(
     segments: &[Segment],
     start: f64,
     speed: f64,
@@ -866,7 +971,7 @@ mod tests {
             words: vec![w("Hola", 0.0, 0.4), w("a", 0.5, 0.6), w("todos", 2.0, 2.5)],
         }];
         let look = (0.35, 0.05);
-        let words = segment_captions(&segments, 10.0, 1.0, look, 2, None, None);
+        let words = styled_captions(&segments, 10.0, 1.0, look, 2, None, None);
         assert_eq!(words.len(), 3);
         let spans: Vec<(f64, f64)> = words
             .iter()
@@ -887,9 +992,9 @@ mod tests {
         assert!((spans[0].0 - 10.0).abs() < 1e-9 && (spans[0].1 - 0.5).abs() < 1e-9);
         assert!((spans[1].1 - (0.1 + WORD_LINGER)).abs() < 1e-9);
         assert!((spans[2].0 - 12.0).abs() < 1e-9);
-        let pop = segment_captions(&segments, 0.0, 2.0, look, 1, None, None);
+        let pop = styled_captions(&segments, 0.0, 2.0, look, 1, None, None);
         assert!(matches!(pop.as_slice(), [Command::AddKeyedTextClip { duration: Some(d), .. }] if (*d - 1.5).abs() < 1e-9));
-        let still = segment_captions(&segments, 0.0, 1.0, look, 0, None, None);
+        let still = styled_captions(&segments, 0.0, 1.0, look, 0, None, None);
         assert!(matches!(still.as_slice(), [Command::AddTextClip { .. }]));
         // a script's words are spread by length
         let plain = Segment {
@@ -923,7 +1028,7 @@ mod tests {
             text: "la mejor ferretería".to_owned(),
             words: Vec::new(),
         }];
-        let out = segment_captions(&segments, 0.0, 1.0, (0.35, 0.05), 2, Some(&base), Some(&accent));
+        let out = styled_captions(&segments, 0.0, 1.0, (0.35, 0.05), 2, Some(&base), Some(&accent));
         let looks: Vec<(String, f64)> = out
             .iter()
             .map(|c| match c {
@@ -934,5 +1039,34 @@ mod tests {
         assert_eq!(looks[0].0, "#ffffff");
         assert_eq!(looks[2].0, "#ffd21f", "the longest word is the key");
         assert!(looks[2].1 > looks[0].1);
+    }
+
+    /// TetalCut: capitals and a movement finish every caption; a pop keeps
+    /// its scale and a float moves around the caption's own place.
+    #[test]
+    fn captions_go_in_capitals_and_move_around_their_place() {
+        let segments = vec![Segment {
+            start: 0.0,
+            end: 3.0,
+            text: "hola mostazal".to_owned(),
+            words: Vec::new(),
+        }];
+        let finish = Finish { style: 1, uppercase: true, motion: 2 };
+        let out = segment_captions(&segments, 0.0, 1.0, (0.35, 0.05), finish, None, None);
+        let Command::AddKeyedTextClip { style: Some(style), keys, .. } = &out[0] else {
+            panic!("{:?}", out[0]);
+        };
+        assert_eq!(style.content, "HOLA MOSTAZAL");
+        assert!(keys.iter().any(|k| k.property == KeyProperty::Scale));
+        let float: Vec<f64> = keys
+            .iter()
+            .filter(|k| k.property == KeyProperty::OffsetY)
+            .map(|k| k.value)
+            .collect();
+        assert!(float.len() > 2 && float.iter().all(|y| (0.33..=0.36).contains(y)));
+        // a still caption that moves becomes a keyed one
+        let still = Finish { style: 0, uppercase: false, motion: 1 };
+        let out = segment_captions(&segments, 0.0, 1.0, (0.35, 0.05), still, None, None);
+        assert!(matches!(out[0], Command::AddKeyedTextClip { .. }));
     }
 }

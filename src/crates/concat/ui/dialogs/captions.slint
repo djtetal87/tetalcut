@@ -44,6 +44,11 @@ export struct CaptionsSheetData {
     /// TetalCut: the caption templates' names, and the chosen one's row.
     templates: [string],
     template: int,
+    /// TetalCut: every caption in capitals.
+    uppercase: bool,
+    /// TetalCut: the movements while on screen, and the chosen one's row.
+    motions: [string],
+    motion: int,
     running: bool,
     /// 0..1: where the transcription surely is.
     progress: float,
@@ -75,6 +80,8 @@ export component CaptionsDialog inherits Modal {
     callback size-changed(index: int);
     callback style-changed(index: int);
     callback template-changed(index: int);
+    callback uppercase-toggled(on: bool);
+    callback motion-changed(index: int);
     callback begin();
     callback cancel();
 
@@ -231,6 +238,26 @@ export component CaptionsDialog inherits Modal {
                     options: [I18n.t("captions.styleStill"), I18n.t("captions.stylePop"), I18n.t("captions.styleWords")];
                     current: root.data.style;
                     changed(index) => { root.style-changed(index); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("captions.motion");
+                Select {
+                    options: root.data.motions;
+                    current: root.data.motion;
+                    changed(index) => { root.motion-changed(index); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("captions.uppercase");
+                HorizontalLayout {
+                    alignment: start;
+                    Switch {
+                        checked: root.data.uppercase;
+                        toggled(on) => { root.uppercase-toggled(on); }
+                    }
                 }
             }
 

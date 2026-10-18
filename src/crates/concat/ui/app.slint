@@ -295,6 +295,8 @@ export component App inherits Window {
     callback captions-size-changed(index: int);
     callback captions-style-changed(index: int);
     callback captions-template-changed(index: int);
+    callback captions-uppercase-toggled(on: bool);
+    callback captions-motion-changed(index: int);
     callback captions-begin();
     callback captions-cancel();
 
@@ -894,6 +896,8 @@ export component App inherits Window {
         size-changed(index) => { root.captions-size-changed(index); }
         style-changed(index) => { root.captions-style-changed(index); }
         template-changed(index) => { root.captions-template-changed(index); }
+        uppercase-toggled(on) => { root.captions-uppercase-toggled(on); }
+        motion-changed(index) => { root.captions-motion-changed(index); }
         begin => { root.captions-begin(); }
         cancel => { root.captions-cancel(); }
     }

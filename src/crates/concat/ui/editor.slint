@@ -34,6 +34,16 @@ import {
 // A global has no such arithmetic. Rust binds it once, any number of instances
 // read it, and a seat is then only a box with a name in it — see Seat, which
 // is the whole of what forwarding is left.
+/// TetalCut: one template in the gallery.
+export struct TemplateCardData {
+    /// The bundle folder: what using and deleting name.
+    path: string,
+    name: string,
+    /// How many clips it asks for.
+    slots: int,
+    poster: image,
+}
+
 export global Editor {
     // ── the layout ───────────────────────────────────────────────────────
     //
@@ -179,6 +189,41 @@ export global Editor {
     /// The Adjust tab: the colour package's knobs for the selected clip.
     in-out property <[AppliedParamData]> adjust-params;
     callback adjust-set(key: string, value: float);
+
+    // ── TetalCut ──
+    /// Auto light (0), auto colour (1) or both (2) on the selected clip.
+    callback adjust-auto(kind: int);
+    /// The movement panel: the choices, the selected clip's rows, and a
+    /// row picked by name (`kind` 0 entrance, 1 exit, 2 loop).
+    in-out property <[string]> motion-entrances;
+    in-out property <[string]> motion-exits;
+    in-out property <[string]> motion-loops;
+    in-out property <int> motion-entrance;
+    in-out property <int> motion-exit;
+    in-out property <int> motion-loop;
+    callback motion-pick(kind: int, name: string);
+    callback motion-apply-all();
+    /// The keyframe button: a key on every picture property at the
+    /// playhead, or those keys off; filled when there are keys here.
+    in-out property <bool> keyed-here;
+    callback key-all-toggle();
+    /// Speed curves: the ready-made ones, the selected clip's (-1 drawn),
+    /// and its curve as the curve editor draws it.
+    in-out property <[string]> speed-presets;
+    in-out property <int> speed-preset;
+    in-out property <[CurveData]> speed-curve;
+    callback speed-preset-pick(name: string);
+    callback speed-curve-point(index: int, x: float, y: float);
+    callback speed-curve-remove(index: int);
+    /// Templates: the gallery, using one (it asks for the clips), taking
+    /// one away, saving the open project as one, and the selected clip's
+    /// media marked as a slot to replace.
+    in-out property <[TemplateCardData]> templates;
+    callback template-use(path: string);
+    callback template-delete(path: string);
+    callback template-save();
+    in-out property <bool> placeholder-here;
+    callback placeholder-toggle();
     /// The Adjust tab's wheels and curves, and the picture chain's, a
     /// group a link: see `grading.slint`. A wheel's puck and master are set
     /// as knobs, `<key>.x`, `<key>.y` and `<key>.m`; a curve's points by

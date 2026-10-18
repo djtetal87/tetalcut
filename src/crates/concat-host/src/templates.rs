@@ -77,7 +77,16 @@ pub struct SlotFill {
 }
 
 /// Where the library lives under the config directory.
+///
+/// TetalCut: on a Mac and an iPhone, in Documents as "TetalCut Plantillas",
+/// where Finder and the Files app see it - so a template can be sent to
+/// another device (AirDrop, WhatsApp, iCloud) and dropped into the same
+/// folder there.
 pub fn templates_dir(config: &Path) -> PathBuf {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home).join("Documents").join("TetalCut Plantillas");
+    }
     config.join("templates")
 }
 

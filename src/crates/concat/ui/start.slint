@@ -11,6 +11,7 @@ import { Tip } from "primitives/tooltip.slint";
 import { Focus } from "util.slint";
 import { NumberField } from "primitives/number-field.slint";
 import { Select } from "primitives/select.slint";
+import { Editor, TemplateCardData } from "editor.slint";
 
 // The launch screen: a launcher with a rail, and the window's own ground
 // under all of it — no card around the whole thing, no shadow. A setup
@@ -959,6 +960,146 @@ component PosterCard inherits Rectangle {
     }
 }
 
+// TetalCut: one template in the gallery - its poster, its name, how many
+// clips it asks for. A tap uses it; the cross asks once before deleting.
+component TemplateCard inherits Rectangle {
+    in property <TemplateCardData> template;
+    in property <bool> enabled: true;
+    callback used();
+    callback deleted();
+
+    property <bool> confirm;
+
+    border-radius: Theme.r-lg;
+    background: Theme.launch-panel;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.line-strong : Theme.line;
+    clip: true;
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.confirm = false;
+                root.used();
+            }
+        }
+    }
+
+    poster := Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.width * 16 / 9;
+        background: Theme.launch-well;
+        clip: true;
+
+        if root.template.poster.width > 0: Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.template.poster;
+            image-fit: cover;
+        }
+        if root.template.poster.width == 0: Icon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            glyph: Glyph.film;
+            size: 19px;
+            tint: Theme.fg-dim;
+        }
+
+        Rectangle {
+            x: parent.width - self.width - 6px;
+            y: 6px;
+            width: root.confirm ? 64px : 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: root.confirm ? #e5484d : Theme.overlay;
+
+            if !root.confirm: Icon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                glyph: Glyph.close;
+                size: 11px;
+                tint: Theme.fg-muted;
+            }
+            if root.confirm: Text {
+                text: I18n.t("template.delete");
+                color: white;
+                font-size: Theme.fs-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    if (root.confirm) {
+                        root.confirm = false;
+                        root.deleted();
+                    } else {
+                        root.confirm = true;
+                    }
+                }
+            }
+        }
+    }
+
+    VerticalLayout {
+        x: 8px;
+        y: poster.height + 6px;
+        width: parent.width - 16px;
+        height: self.preferred-height;
+        spacing: 2px;
+
+        Text {
+            text: root.template.name;
+            color: Theme.fg;
+            font-size: Theme.fs-lg;
+            font-weight: Theme.weight-title;
+            overflow: elide;
+        }
+        Text {
+            text: root.template.slots == 1
+                ? I18n.t("template.oneClip")
+                : I18n.t1("template.clips", "\{root.template.slots}");
+            color: Theme.fg-dim;
+            font-size: Theme.fs-sm;
+            overflow: elide;
+        }
+    }
+}
+
+// TetalCut: the template gallery, a row that scrolls sideways.
+component TemplateShelf inherits Rectangle {
+    in property <[TemplateCardData]> templates;
+    in property <bool> enabled: true;
+
+    property <length> card-w: 120px;
+    property <length> gap: 12px;
+    property <length> content-w: root.templates.length * (root.card-w + root.gap) - root.gap;
+
+    height: root.card-w * 16 / 9 + 52px;
+
+    shelf := Flickable {
+        width: root.width;
+        height: root.height;
+        viewport-width: Math.max(root.width, root.content-w);
+        viewport-height: root.height;
+        interactive: root.content-w > root.width;
+
+        for template[index] in root.templates: TemplateCard {
+            x: index * (root.card-w + root.gap);
+            y: 0;
+            width: root.card-w;
+            height: root.height;
+            template: template;
+            enabled: root.enabled;
+            used => { Editor.template-use(template.path); }
+            deleted => { Editor.template-delete(template.path); }
+        }
+    }
+}
+
 // The new-project card, then every project this machine has opened.
 //
 // `grid-cols-[repeat(auto-fill,minmax(210px,1fr))]`, arithmetic instead of
@@ -1167,6 +1308,22 @@ export component StartScreen inherits Rectangle {
                     }
 
                     Rectangle { height: root.narrow ? 24px : 34px; }
+
+                    // ── TetalCut: the templates ──────────────────────────
+                    if Editor.templates.length > 0: VerticalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: I18n.t("template.templates");
+                            color: Theme.fg;
+                            font-size: root.narrow ? 20px : 24px;
+                            font-weight: Theme.weight-title;
+                        }
+                        TemplateShelf {
+                            templates: Editor.templates;
+                            enabled: !root.busy;
+                        }
+                        Rectangle { height: root.narrow ? 16px : 24px; }
+                    }
 
                     // ── the grid ─────────────────────────────────────────
                     ProjectsGrid {

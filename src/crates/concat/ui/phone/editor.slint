@@ -6,6 +6,7 @@ import { Theme } from "../theme/theme.slint";
 import { Fmt } from "../util.slint";
 import { Glyph, Icon } from "../icons.slint";
 import { Editor } from "../editor.slint";
+import { AutoAdjustRow, MotionPanel, SpeedCurvePanel } from "../inspector/tetal.slint";
 import { Lanes } from "../timeline/lanes.slint";
 import { ClipKind } from "../timeline/model.slint";
 import { PreviewPane } from "../workspace/preview-pane.slint";
@@ -737,6 +738,25 @@ export component PhoneEditor inherits Rectangle {
                 current: root.sheet == "clip-text";
                 clicked => { root.show("clip-text", true); }
             }
+            // TetalCut: CapCut's Animation and keyframe tools
+            if root.is-picture || root.is-text || root.is-shape: ToolItem {
+                glyph: Glyph.sparkle;
+                label: I18n.t("motion.motion");
+                current: root.sheet == "clip-motion";
+                clicked => { root.show("clip-motion", true); }
+            }
+            if root.is-picture || root.is-text || root.is-shape: ToolItem {
+                glyph: Glyph.keyframe;
+                label: I18n.t("keyframes.keyframe");
+                current: Editor.keyed-here;
+                clicked => { Editor.key-all-toggle(); }
+            }
+            if root.is-picture: ToolItem {
+                glyph: Glyph.slot;
+                label: I18n.t("template.replaceableShort");
+                current: Editor.placeholder-here;
+                clicked => { Editor.placeholder-toggle(); }
+            }
             if root.is-layer: ToolItem {
                 glyph: Glyph.filter;
                 label: I18n.t("configPane.filter");
@@ -1049,10 +1069,17 @@ export component PhoneEditor inherits Rectangle {
             cutout-clear => { Editor.cutout-clear(); }
         }
 
-        if root.sheet == "clip-speed": SpeedPanel {
-            selected: Editor.selected-clip;
-            set(field, value) => { Editor.clip-set(field, value); }
-            commit => { Editor.clip-commit(); }
+        if root.sheet == "clip-speed": VerticalLayout {
+            SpeedPanel {
+                selected: Editor.selected-clip;
+                set(field, value) => { Editor.clip-set(field, value); }
+                commit => { Editor.clip-commit(); }
+            }
+            SpeedCurvePanel { }
+        }
+
+        if root.sheet == "clip-motion": MotionPanel {
+            titles: root.is-text;
         }
 
         if root.sheet == "clip-audio": VerticalLayout {
@@ -1093,14 +1120,17 @@ export component PhoneEditor inherits Rectangle {
             }
         }
 
-        if root.sheet == "clip-adjust": AdjustPanel {
-            params: Editor.adjust-params;
-            wheels: Editor.adjust-wheels;
-            curves: Editor.adjust-curves;
-            set(key, value) => { Editor.adjust-set(key, value); }
-            curve-point(key, point, x, y) => { Editor.curve-point(-1, key, point, x, y); }
-            curve-remove(key, point) => { Editor.curve-remove(-1, key, point); }
-            commit => { Editor.clip-commit(); }
+        if root.sheet == "clip-adjust": VerticalLayout {
+            AutoAdjustRow { }
+            AdjustPanel {
+                params: Editor.adjust-params;
+                wheels: Editor.adjust-wheels;
+                curves: Editor.adjust-curves;
+                set(key, value) => { Editor.adjust-set(key, value); }
+                curve-point(key, point, x, y) => { Editor.curve-point(-1, key, point, x, y); }
+                curve-remove(key, point) => { Editor.curve-remove(-1, key, point); }
+                commit => { Editor.clip-commit(); }
+            }
         }
 
         if root.sheet == "clip-text": TextPanel {
@@ -1144,6 +1174,22 @@ export component PhoneEditor inherits Rectangle {
                     root.hide();
                     Editor.modify-project();
                 }
+            }
+
+            Rectangle { height: 8px; }
+
+            // TetalCut: this edit as a template, its marked clips the ones
+            // to replace
+            SheetButton {
+                glyph: Glyph.slot;
+                label: I18n.t("template.saveAsTemplate");
+                clicked => {
+                    root.hide();
+                    Editor.template-save();
+                }
+            }
+            SheetNote {
+                text: I18n.t("template.saveHint");
             }
         }
     }

@@ -289,6 +289,7 @@ pub(super) fn apply(
             };
             let curve = curve.filter(|points| crate::speed::curve_of(points).is_some());
             let source_covered = clip.duration * clip.speed;
+            let old_end = clip.start + clip.duration;
             let mean = curve
                 .as_ref()
                 .map(|points| crate::speed::mean_of(points))
@@ -300,6 +301,19 @@ pub(super) fn apply(
                     &mut clip.duration,
                     (source_covered / mean).max(MIN_CLIP_DURATION),
                 );
+            // TetalCut: grown by a slow curve, the clip pushes the rest of
+            // its lane along, as a constant slow-down does.
+            let (track_id, start, duration) = (clip.track_id.clone(), clip.start, clip.duration);
+            let grow = start + duration - old_end;
+            if grow > 0.0 && !timeline.is_free(&track_id, start, duration, &[&clip_id]) {
+                for other in timeline.clips_where(|other| {
+                    other.id != clip_id
+                        && other.track_id == track_id
+                        && other.start >= old_end - crate::placement::TOUCH
+                }) {
+                    other.start += grow;
+                }
+            }
             Ok(Outcome {
                 created_id: None,
                 applied,

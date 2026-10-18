@@ -90,6 +90,12 @@ impl Default for StartPane {
     }
 }
 
+/// TetalCut: where a project made from a template goes - where new
+/// projects go.
+pub fn project_location() -> String {
+    default_location()
+}
+
 /// Where a new project goes unless told otherwise; see [`location_on`].
 /// On an iPhone the folder is made here, so that the Files app shows it
 /// from the first launch and not only from the first project.

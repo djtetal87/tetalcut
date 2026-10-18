@@ -1,0 +1,158 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 AJ Media Studio (TetalCut, a fork of Concat)
+
+// TetalCut's panels, as CapCut has them: a clip's movement (entrance, exit
+// and movement on screen), auto colour and light over Adjust, and speed
+// curves under Speed. They read and report through the Editor global, so
+// the desktop inspector and the phone's sheets show the same panels.
+
+import { I18n } from "../i18n.slint";
+import { Theme } from "../theme/theme.slint";
+import { Section, SectionBody, SectionHeader } from "../primitives/panel.slint";
+import { Button } from "../primitives/modal.slint";
+import { Note } from "controls.slint";
+import { CurveEditor } from "grading.slint";
+import { CategoryPillBar } from "../workspace/media-pane.slint";
+import { Editor } from "../editor.slint";
+
+/// A labelled row of choices, scrolled sideways: one row of the movement panel.
+component ChoiceRow inherits VerticalLayout {
+    in property <string> label;
+    in property <[string]> options;
+    in property <int> current;
+    callback picked(name: string);
+
+    padding-left: Theme.pad;
+    padding-right: Theme.pad;
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: Theme.fg-dim;
+        font-size: Theme.fs-sm;
+    }
+    CategoryPillBar {
+        categories: root.options;
+        current: root.current < 0 ? "" : root.options[root.current];
+        picked(name) => { root.picked(name); }
+    }
+}
+
+/// Movement: how the clip comes in, goes out and moves while on screen.
+export component MotionPanel inherits VerticalLayout {
+    /// A title: offers to give every title the same movement.
+    in property <bool> titles;
+    in property <bool> first: true;
+
+    Section {
+        first: root.first;
+        header := SectionHeader {
+            title: I18n.t("motion.motion");
+            collapsible: true;
+        }
+
+        if header.open: SectionBody {
+            spacing: 10px;
+
+            ChoiceRow {
+                label: I18n.t("motion.entrance");
+                options: Editor.motion-entrances;
+                current: Editor.motion-entrance;
+                picked(name) => { Editor.motion-pick(0, name); }
+            }
+            ChoiceRow {
+                label: I18n.t("motion.exit");
+                options: Editor.motion-exits;
+                current: Editor.motion-exit;
+                picked(name) => { Editor.motion-pick(1, name); }
+            }
+            ChoiceRow {
+                label: I18n.t("motion.loop");
+                options: Editor.motion-loops;
+                current: Editor.motion-loop;
+                picked(name) => { Editor.motion-pick(2, name); }
+            }
+
+            if root.titles: HorizontalLayout {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+                Button {
+                    block: true;
+                    label: I18n.t("motion.applyToAllTitles");
+                    clicked => { Editor.motion-apply-all(); }
+                }
+            }
+
+            Note {
+                text: I18n.t("motion.hint");
+            }
+        }
+    }
+}
+
+/// Auto light and colour: the Adjust panel's knobs set from the picture.
+export component AutoAdjustRow inherits VerticalLayout {
+    padding-left: Theme.pad;
+    padding-right: Theme.pad;
+    padding-top: 10px;
+    padding-bottom: 4px;
+    spacing: 6px;
+
+    HorizontalLayout {
+        spacing: 6px;
+        Button {
+            horizontal-stretch: 1;
+            label: I18n.t("adjust.autoLight");
+            clicked => { Editor.adjust-auto(0); }
+        }
+        Button {
+            horizontal-stretch: 1;
+            label: I18n.t("adjust.autoColor");
+            clicked => { Editor.adjust-auto(1); }
+        }
+    }
+    Button {
+        block: true;
+        primary: true;
+        label: I18n.t("adjust.autoBoth");
+        clicked => { Editor.adjust-auto(2); }
+    }
+}
+
+/// Speed curves: CapCut's ready-made ones, and the curve to draw.
+export component SpeedCurvePanel inherits VerticalLayout {
+    in property <bool> first: false;
+
+    Section {
+        first: root.first;
+        header := SectionHeader {
+            title: I18n.t("speedCurve.curve");
+            collapsible: true;
+        }
+
+        if header.open: SectionBody {
+            spacing: 10px;
+
+            ChoiceRow {
+                label: I18n.t("speedCurve.presets");
+                options: Editor.speed-presets;
+                current: Editor.speed-preset;
+                picked(name) => { Editor.speed-preset-pick(name); }
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+                CurveEditor {
+                    curves: Editor.speed-curve;
+                    point(key, index, x, y) => { Editor.speed-curve-point(index, x, y); }
+                    remove(key, index) => { Editor.speed-curve-remove(index); }
+                }
+            }
+
+            Note {
+                text: I18n.t("speedCurve.hint");
+            }
+        }
+    }
+}

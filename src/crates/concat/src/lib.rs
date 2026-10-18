@@ -230,6 +230,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     // first thing the window says.
     let mut studio = Studio::new(host);
     studio.set_phone(phone);
+    // TetalCut: the template gallery, for the launch screen
+    studio.templates_refresh();
     studio.reload_packages(false);
     studio.watch_packages();
     let dark = studio.prefs.dark.unwrap_or(true);
@@ -320,6 +322,18 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         editor.set_adjust_params(ModelRc::from(models.adjust_params.clone()));
         editor.set_adjust_wheels(ModelRc::from(models.adjust_wheels.clone()));
         editor.set_adjust_curves(ModelRc::from(models.adjust_curves.clone()));
+        // TetalCut: the speed curve, and the movement and speed choices
+        editor.set_speed_curve(ModelRc::from(models.speed_curve.clone()));
+        let names = |list: &[&str]| -> ModelRc<SharedString> {
+            ModelRc::new(slint::VecModel::from(
+                list.iter().map(|name| SharedString::from(*name)).collect::<Vec<_>>(),
+            ))
+        };
+        editor.set_motion_entrances(names(&concat_project::motion::ENTRANCES));
+        editor.set_motion_exits(names(&concat_project::motion::EXITS));
+        editor.set_motion_loops(names(&concat_project::motion::LOOPS));
+        editor.set_speed_presets(names(&concat_project::speed::PRESETS));
+        editor.set_templates(ModelRc::from(crate::studio::templates_model()));
         editor.set_visual_wheels(ModelRc::from(models.visual_wheels.clone()));
         editor.set_visual_curves(ModelRc::from(models.visual_curves.clone()));
         editor.set_visual_colours(ModelRc::from(models.visual_colours.clone()));
@@ -801,7 +815,7 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         state.apply_transition(id.as_str());
     }));
     editor.on_library_save_template(on_window!(|state| {
-        state.save_template();
+        state.template_save();
     }));
     // Nothing borrowed: the dialog is asked on a turn of its own, and the
     // files it answers with are imported there; see `host::after_dialog`.
@@ -1161,6 +1175,53 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
 
     editor.on_adjust_set(on_lanes!(|state, key: SharedString, value: f32| {
         state.adjust_set(key.as_str(), value);
+    }));
+
+    // ── TetalCut ──
+    editor.on_adjust_auto(on_lanes!(|state, kind: i32| {
+        state.adjust_auto(kind);
+    }));
+    editor.on_motion_pick(on_lanes!(|state, kind: i32, name: SharedString| {
+        let list: &[&str] = match kind {
+            0 => &concat_project::motion::ENTRANCES,
+            1 => &concat_project::motion::EXITS,
+            _ => &concat_project::motion::LOOPS,
+        };
+        if let Some(index) = list.iter().position(|row| *row == name.as_str()) {
+            state.motion_set(kind, index as i32);
+        }
+    }));
+    editor.on_motion_apply_all(on_lanes!(|state| {
+        state.motion_apply_all();
+    }));
+    editor.on_key_all_toggle(on_lanes!(|state| {
+        state.key_all_toggle();
+    }));
+    editor.on_speed_preset_pick(on_lanes!(|state, name: SharedString| {
+        if let Some(index) = concat_project::speed::PRESETS
+            .iter()
+            .position(|row| *row == name.as_str())
+        {
+            state.speed_preset(index as i32);
+        }
+    }));
+    editor.on_speed_curve_point(on_lanes!(|state, index: i32, x: f32, y: f32| {
+        state.speed_curve_point(index, x, y);
+    }));
+    editor.on_speed_curve_remove(on_lanes!(|state, index: i32| {
+        state.speed_curve_remove(index);
+    }));
+    editor.on_template_use(on_window!(|state, path: SharedString| {
+        state.template_use(path.as_str());
+    }));
+    editor.on_template_delete(on_window!(|state, path: SharedString| {
+        state.template_delete(path.as_str());
+    }));
+    editor.on_template_save(on_window!(|state| {
+        state.template_save();
+    }));
+    editor.on_placeholder_toggle(on_lanes!(|state| {
+        state.placeholder_toggle();
     }));
     editor.on_curve_point(on_lanes!(|state,
                                      entry: i32,
@@ -1680,6 +1741,12 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_captions_style_changed(on_window!(|state, index: i32| {
         state.handle(Msg::Captions(CaptionsMsg::StyleChanged(index)));
     }));
+    app.on_captions_uppercase_toggled(on_window!(|state, on: bool| {
+        state.handle(Msg::Captions(CaptionsMsg::UppercaseToggled(on)));
+    }));
+    app.on_captions_motion_changed(on_window!(|state, index: i32| {
+        state.handle(Msg::Captions(CaptionsMsg::MotionChanged(index)));
+    }));
     app.on_captions_template_changed(on_window!(|state, index: i32| {
         state.handle(Msg::Captions(CaptionsMsg::TemplateChanged(index)));
     }));
@@ -1762,7 +1829,7 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                             },
                         ),
                         "export" => state.handle(Msg::Export(ExportMsg::Open)),
-                        "template" => state.save_template(),
+                        "template" => state.template_save(),
                         "speech" => state.handle(Msg::Speech(SpeechMsg::Open)),
                         "clear-cache" => state.clear_project_cache(),
                         "settings" => state.handle(Msg::Settings(SettingsMsg::Open)),

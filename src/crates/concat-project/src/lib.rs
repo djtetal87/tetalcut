@@ -21,10 +21,12 @@
 //! document model needs serde, and concat-core's zero-dependency rule is worth
 //! more than the adjacency.
 
+pub mod auto_grade;
 pub mod commands;
 pub mod doc;
 pub mod editor;
 pub mod model;
+pub mod motion;
 pub mod placement;
 pub mod speed;
 

@@ -46,6 +46,8 @@ use concat_project::model::{
 
 mod consolidate;
 use consolidate::MergeJob;
+mod tetal;
+pub use tetal::templates_model;
 use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::dock::{
@@ -578,6 +580,8 @@ pub struct Models {
     /// link.
     pub adjust_wheels: Rc<VecModel<WheelData>>,
     pub adjust_curves: Rc<VecModel<CurveData>>,
+    /// TetalCut: the speed panel's one curve.
+    pub speed_curve: Rc<VecModel<CurveData>>,
     pub visual_wheels: Rc<VecModel<WheelGroupData>>,
     pub visual_curves: Rc<VecModel<CurveGroupData>>,
     /// The picture's chain's colour knobs, a row each.
@@ -658,6 +662,7 @@ impl Models {
             adjust_params: Rc::new(VecModel::default()),
             adjust_wheels: Rc::new(VecModel::default()),
             adjust_curves: Rc::new(VecModel::default()),
+            speed_curve: Rc::new(VecModel::default()),
             visual_wheels: Rc::new(VecModel::default()),
             visual_colours: Rc::new(VecModel::default()),
             visual_curves: Rc::new(VecModel::default()),
@@ -1385,7 +1390,13 @@ fn clip_commands(id: &str, before: &Clip, after: &Clip) -> Vec<Command> {
             cutout: after.cutout.clone(),
         });
     }
-    if after.speed != before.speed {
+    if after.speed_curve != before.speed_curve && after.speed_curve.is_some() {
+        // TetalCut: a curve drawn in the speed panel
+        commands.push(Command::SetClipSpeedCurve {
+            clip_id: id.to_owned(),
+            curve: after.speed_curve.clone(),
+        });
+    } else if after.speed != before.speed {
         commands.push(Command::SetClipSpeed {
             clip_id: id.to_owned(),
             speed: after.speed,
@@ -8065,6 +8076,16 @@ impl Studio {
         };
         sync(&models.adjust_wheels, adjust_wheels);
         sync(&models.adjust_curves, placed(adjust_curves));
+        // TetalCut: the speed curve, the movement rows and the keyframe
+        // button, for the selected clip
+        sync(&models.speed_curve, placed(vec![self.speed_curve_rows()]));
+        editor.set_speed_preset(self.speed_preset_current());
+        let [entrance, exit, looping] = self.motion_choice();
+        editor.set_motion_entrance(entrance as i32);
+        editor.set_motion_exit(exit as i32);
+        editor.set_motion_loop(looping as i32);
+        editor.set_keyed_here(self.keyed_here());
+        editor.set_placeholder_here(self.placeholder_here());
         // The chain's, one group a link, in chain order, each group's list
         // the model kept for its link.
         let visual_curves = placed(visual_curves);
@@ -9681,6 +9702,22 @@ impl Studio {
             ));
             rows.push(rule());
         }
+        // TetalCut: the clip's file as a slot a template asks to be
+        // replaced, when the project is saved as a template.
+        if clip.kind.is_visual() {
+            let slot = self
+                .project()
+                .media_by_id(&clip.media_id)
+                .is_some_and(|item| item.placeholder);
+            rows.push(check(
+                "placeholder",
+                &t("template.replaceable"),
+                "",
+                slot,
+                !locked,
+            ));
+            rows.push(rule());
+        }
         // The clip's sound, written out as it plays, as a file of its own
         // in the bin. For anything with sound in it; a clip whose track is
         // muted still renders, since the file is the clip's and not the
@@ -10391,6 +10428,7 @@ impl Studio {
             }
             "export-audio" => self.export_clip_audio(id),
             "detach" => self.detach_audio(&clip),
+            "placeholder" => self.placeholder_toggle_on(id),
             "reattach" => {
                 self.apply(Command::ReattachAudio {
                     clip_id: id.to_owned(),

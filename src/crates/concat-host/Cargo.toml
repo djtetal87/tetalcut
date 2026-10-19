@@ -45,6 +45,17 @@ serde_json.workspace = true
 cpal = "0.16"
 memmap2 = "0.9"
 
+# TetalCut: Mejorar voz (IA) - DeepFilterNet 3 (MIT/Apache-2.0), its model
+# built in and run by tract; see voice_ai.rs.
+deep_filter = { git = "https://github.com/Rikorose/DeepFilterNet", rev = "d375b2d8309e0935d165700c91da9de862a99c31", default-features = false, features = ["tract", "default-model"] }
+ndarray = "0.15"
+# held at the tract DeepFilterNet is built against (later 0.21s moved to
+# ndarray 0.16, which its code does not compile with)
+tract-core = "=0.21.4"
+tract-onnx = "=0.21.4"
+tract-pulse = "=0.21.4"
+tract-hir = "=0.21.4"
+
 # The machine's memory, for sizing the caches to it; see memory.rs.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

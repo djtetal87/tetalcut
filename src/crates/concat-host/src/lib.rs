@@ -44,6 +44,7 @@ pub mod sound_files;
 pub mod templates;
 pub mod titles;
 pub mod updates;
+pub mod voice_ai;
 
 pub use brush::{Brushes, RegionRequest};
 pub use cutout::{AnalyseRequest, Cutouts};

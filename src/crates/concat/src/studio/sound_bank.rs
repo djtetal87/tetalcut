@@ -29,6 +29,16 @@ const SEARCH: &str = "Buscar en Freesound";
 const FREESOUND: &str = "Freesound";
 /// A search result's row is named by this and its index.
 const HIT: &str = "fs:";
+/// The pack of the effects TikTok and CapCut use most, from Freesound.
+const POPULAR: &str = "Populares";
+/// Video files the import takes the sound out of.
+const VIDEO: [&str; 5] = ["mp4", "mov", "m4v", "webm", "mkv"];
+
+/// The Populares pack: each sound's name in the bank and its Freesound id
+/// (free licences only - CC0, or CC BY, credited in the pack's Créditos.txt).
+const POPULARES: &[(&str, u64)] = &[
+    // POPULARES-LIST
+];
 
 /// Written once the built-in sounds have been put in the folder, so one the
 /// user deletes stays deleted.
@@ -55,6 +65,13 @@ struct Bank {
     searching: bool,
     commercial: bool,
     status: String,
+    /// The sound being renamed, and the one a delete waits to be confirmed on.
+    renaming: Option<String>,
+    deleting: Option<String>,
+    /// The Populares pack is being fetched.
+    fetching: bool,
+    /// A compilation is being cut, or a video's sound taken out.
+    working: bool,
 }
 
 impl Default for Bank {
@@ -69,6 +86,10 @@ impl Default for Bank {
             searching: false,
             commercial: true,
             status: String::new(),
+            renaming: None,
+            deleting: None,
+            fetching: false,
+            working: false,
         }
     }
 }
@@ -139,7 +160,7 @@ fn scan(root: &Path) -> Vec<Sound> {
         }
     }
     // TetalCut's own categories first, in the bank's order
-    let order = ["Música", "Transiciones", "Impactos", "Interfaz", "Divertidos", MINE];
+    let order = [POPULAR, "Música", "Transiciones", "Impactos", "Interfaz", "Divertidos", MINE];
     out.sort_by_key(|sound| {
         order
             .iter()
@@ -178,6 +199,7 @@ impl Studio {
     pub fn sounds_open(&mut self, open: bool) {
         if open {
             self.sounds_refresh();
+            self.populares_fetch();
         } else {
             self.close_source();
         }
@@ -237,6 +259,7 @@ impl Studio {
         self.prefs.freesound_key = (!key.is_empty()).then(|| key.to_owned());
         self.prefs.save(&self.host.dirs);
         BANK.with(|bank| bank.borrow_mut().status.clear());
+        self.populares_fetch();
     }
 
     /// Only sounds a paid video may use, or every licence.
@@ -322,21 +345,203 @@ impl Studio {
     /// The user's own files brought into the bank's "Mis sonidos".
     pub fn sounds_import(&mut self) {
         let root = bank_root(&self.host.dirs.config).join(MINE);
+        let kinds: &'static [&'static str] = &[
+            "m4a", "mp3", "wav", "aac", "flac", "ogg", "aif", "aiff", "caf", "opus", "mp4", "mov",
+            "m4v", "webm", "mkv",
+        ];
         crate::host::pick_files_then(
             t("sounds.importTitle"),
-            Some((t("sounds.audioFiles"), &AUDIO[..])),
+            Some((t("sounds.audioFiles"), kinds)),
             move |studio, _, _, paths| {
-                let _ = std::fs::create_dir_all(&root);
-                let mut copied = 0;
-                for path in paths {
-                    let Some(name) = path.file_name() else { continue };
-                    if std::fs::copy(&path, root.join(name)).is_ok() {
-                        copied += 1;
+                BANK.with(|bank| bank.borrow_mut().working = true);
+                spawn(
+                    move || {
+                        let _ = std::fs::create_dir_all(&root);
+                        let mut added = 0;
+                        for path in paths {
+                            let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().into_owned())
+                            else {
+                                continue;
+                            };
+                            let video = path
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|e| VIDEO.contains(&e.to_ascii_lowercase().as_str()));
+                            let done = if video {
+                                // a video: its sound, as a sound file
+                                concat_host::sound_files::extract(&path, &root.join(format!("{stem}.m4a")))
+                                    .is_ok()
+                            } else {
+                                path.file_name()
+                                    .is_some_and(|name| std::fs::copy(&path, root.join(name)).is_ok())
+                            };
+                            if done {
+                                added += 1;
+                            }
+                        }
+                        added
+                    },
+                    |studio, _, _, added: usize| {
+                        BANK.with(|bank| bank.borrow_mut().working = false);
+                        studio.sounds_refresh();
+                        studio.sound_category(MINE);
+                        studio.notify(&tf("sounds.imported", &[&added]), false);
+                    },
+                );
+            },
+        );
+    }
+
+    /// A compilation (or a video of one) cut at its silences into a
+    /// category of its own, one sound a file.
+    pub fn sounds_split(&mut self) {
+        let root = bank_root(&self.host.dirs.config);
+        let kinds: &'static [&'static str] = &[
+            "m4a", "mp3", "wav", "aac", "flac", "ogg", "aif", "aiff", "caf", "opus", "mp4", "mov",
+            "m4v", "webm", "mkv",
+        ];
+        crate::host::pick_files_then(
+            t("sounds.splitTitle"),
+            Some((t("sounds.audioFiles"), kinds)),
+            move |studio, _, _, paths| {
+                let Some(path) = paths.into_iter().next() else {
+                    return;
+                };
+                let stem = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Compilado".into());
+                let category = format!("Compilado {stem}");
+                let folder = root.join(&category);
+                BANK.with(|bank| bank.borrow_mut().working = true);
+                studio.notify(&t("sounds.splitting"), false);
+                spawn(
+                    move || concat_host::sound_files::split(&path, &folder, &stem),
+                    move |studio, _, _, result| {
+                        BANK.with(|bank| bank.borrow_mut().working = false);
+                        match result {
+                            Ok(files) => {
+                                studio.sounds_refresh();
+                                studio.sound_category(&category);
+                                studio.notify(&tf("sounds.splitDone", &[&files.len()]), false);
+                            }
+                            Err(error) => studio.notify(&error, true),
+                        }
+                    },
+                );
+            },
+        );
+    }
+
+    /// The rename field opened on a sound, or closed (`path` empty).
+    pub fn sound_rename_begin(&mut self, path: &str) {
+        BANK.with(|bank| {
+            let mut bank = bank.borrow_mut();
+            bank.renaming = (!path.is_empty()).then(|| path.to_owned());
+            bank.deleting = None;
+        });
+    }
+
+    /// A sound given a new name (its file renamed beside it).
+    pub fn sound_rename(&mut self, path: &str, name: &str) {
+        BANK.with(|bank| bank.borrow_mut().renaming = None);
+        let clean: String = name
+            .trim()
+            .chars()
+            .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+            .take(80)
+            .collect();
+        if clean.is_empty() || path.starts_with(HIT) {
+            return;
+        }
+        let from = Path::new(path);
+        let ext = from.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+        let to = from.with_file_name(format!("{clean}.{ext}"));
+        if to.exists() {
+            self.notify(&t("sounds.nameTaken"), true);
+            return;
+        }
+        if let Err(error) = std::fs::rename(from, &to) {
+            self.notify(&error.to_string(), true);
+        }
+        self.sounds_refresh();
+    }
+
+    /// A sound's trash: the first tap asks, the second deletes the file.
+    pub fn sound_delete(&mut self, path: &str) {
+        if path.starts_with(HIT) {
+            return;
+        }
+        let confirmed = BANK.with(|bank| {
+            let mut bank = bank.borrow_mut();
+            bank.renaming = None;
+            if bank.deleting.as_deref() == Some(path) {
+                bank.deleting = None;
+                true
+            } else {
+                bank.deleting = Some(path.to_owned());
+                false
+            }
+        });
+        if !confirmed {
+            return;
+        }
+        if let Err(error) = std::fs::remove_file(path) {
+            self.notify(&error.to_string(), true);
+        }
+        self.sounds_refresh();
+    }
+
+    /// The Populares pack fetched from Freesound, the sounds it lacks (once
+    /// a key is kept; quietly otherwise).
+    pub fn populares_fetch(&mut self) {
+        let Some(key) = self.prefs.freesound_key.clone().filter(|key| !key.is_empty()) else {
+            return;
+        };
+        let folder = bank_root(&self.host.dirs.config).join(POPULAR);
+        let missing: Vec<(String, u64)> = POPULARES
+            .iter()
+            .filter(|(name, _)| !folder.join(format!("{name}.mp3")).exists())
+            .map(|(name, id)| ((*name).to_owned(), *id))
+            .collect();
+        if missing.is_empty() || BANK.with(|bank| bank.borrow().fetching) {
+            return;
+        }
+        BANK.with(|bank| bank.borrow_mut().fetching = true);
+        spawn(
+            move || {
+                let mut credits = Vec::new();
+                let mut failed = None;
+                for (name, id) in missing {
+                    match freesound::sound(&key, id)
+                        .and_then(|hit| freesound::download_to(&folder.join(format!("{name}.mp3")), &hit).map(|()| hit))
+                    {
+                        Ok(hit) => credits.push(format!(
+                            "{name}: \"{}\" de {} ({}) - https://freesound.org/s/{}/",
+                            hit.name, hit.author, hit.license, hit.id
+                        )),
+                        Err(error) => failed = Some(error),
                     }
                 }
+                if !credits.is_empty() {
+                    let file = folder.join("Créditos.txt");
+                    let mut text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                        "Sonidos de Freesound (freesound.org). Los CC BY piden nombrar a su autor.\n".into()
+                    });
+                    for line in credits {
+                        text.push_str(&line);
+                        text.push('\n');
+                    }
+                    let _ = std::fs::write(file, text);
+                }
+                failed
+            },
+            |studio, _, _, failed: Option<String>| {
+                BANK.with(|bank| bank.borrow_mut().fetching = false);
                 studio.sounds_refresh();
-                studio.sound_category(MINE);
-                studio.notify(&tf("sounds.imported", &[&copied]), false);
+                if let Some(error) = failed {
+                    studio.notify(&error, true);
+                }
             },
         );
     }
@@ -397,7 +602,7 @@ impl Studio {
         BANK.with(|bank| {
             let bank = bank.borrow();
             editor.set_sounds_shown(bank.open);
-            let mut categories: Vec<SharedString> = vec![ALL.into(), SEARCH.into()];
+            let mut categories: Vec<SharedString> = vec![ALL.into(), POPULAR.into(), SEARCH.into()];
             for sound in &bank.sounds {
                 if !categories.iter().any(|c| c.as_str() == sound.category) {
                     categories.push(sound.category.as_str().into());
@@ -405,6 +610,19 @@ impl Studio {
             }
             sync(&models.sound_categories, categories);
             editor.set_sound_category(bank.category.as_str().into());
+            let has_key = self.prefs.freesound_key.as_ref().is_some_and(|k| !k.is_empty());
+            editor.set_sounds_note(
+                if bank.working {
+                    t("sounds.working")
+                } else if bank.fetching {
+                    t("sounds.fetchingPopular")
+                } else if bank.category == POPULAR && !has_key {
+                    t("sounds.popularNeedsKey")
+                } else {
+                    String::new()
+                }
+                .into(),
+            );
             let searching = bank.category == SEARCH;
             editor.set_freesound_mode(searching);
             editor.set_freesound_key_set(self.prefs.freesound_key.as_ref().is_some_and(|k| !k.is_empty()));
@@ -427,6 +645,9 @@ impl Studio {
                                 path.ends_with(&format!("({}).mp3", hit.id))
                             }),
                             loading: bank.pending_preview.as_deref() == Some(row.as_str()),
+                            editable: false,
+                            renaming: false,
+                            deleting: false,
                             path: row.into(),
                         }
                     })
@@ -444,6 +665,9 @@ impl Studio {
                     path: sound.path.as_str().into(),
                     playing: playing.as_deref() == Some(sound.path.as_str()),
                     loading: bank.pending_preview.as_deref() == Some(sound.path.as_str()),
+                    editable: true,
+                    renaming: bank.renaming.as_deref() == Some(sound.path.as_str()),
+                    deleting: bank.deleting.as_deref() == Some(sound.path.as_str()),
                 })
                 .collect();
             sync(&models.sounds, rows);

@@ -53,6 +53,11 @@ export struct SoundRowData {
     playing: bool,
     /// Being brought into the project to be heard.
     loading: bool,
+    /// A file of the bank (not a search result): can be renamed and deleted.
+    editable: bool,
+    /// Its rename field is open; its delete waits for a second tap.
+    renaming: bool,
+    deleting: bool,
 }
 
 export global Editor {
@@ -247,6 +252,12 @@ export global Editor {
     callback sound-preview(path: string);
     callback sound-add(path: string);
     callback sounds-import();
+    /// What the bank is busy with, or what it needs, when anything.
+    in-out property <string> sounds-note;
+    callback sounds-split();
+    callback sound-rename-begin(path: string);
+    callback sound-rename(path: string, name: string);
+    callback sound-delete(path: string);
     /// Freesound search, in the bank: the search pill chosen, a key kept,
     /// commercial-use sounds only, what the search is doing or why not.
     in-out property <bool> freesound-mode;

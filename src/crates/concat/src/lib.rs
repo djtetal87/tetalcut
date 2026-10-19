@@ -1241,6 +1241,18 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_sounds_import(on_window!(|state| {
         state.sounds_import();
     }));
+    editor.on_sounds_split(on_window!(|state| {
+        state.sounds_split();
+    }));
+    editor.on_sound_rename_begin(on_window!(|state, path: SharedString| {
+        state.sound_rename_begin(path.as_str());
+    }));
+    editor.on_sound_rename(on_window!(|state, path: SharedString, name: SharedString| {
+        state.sound_rename(path.as_str(), name.as_str());
+    }));
+    editor.on_sound_delete(on_window!(|state, path: SharedString| {
+        state.sound_delete(path.as_str());
+    }));
     editor.on_freesound_search(on_window!(|state, query: SharedString| {
         state.freesound_search(query.as_str());
     }));

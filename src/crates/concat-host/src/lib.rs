@@ -40,6 +40,7 @@ pub mod proxy;
 pub mod record;
 pub mod reverse;
 pub mod session;
+pub mod sound_files;
 pub mod templates;
 pub mod titles;
 pub mod updates;

@@ -150,6 +150,47 @@ pub fn search(key: &str, query: &str, commercial: bool) -> Result<Vec<Hit>, Stri
     parse(&get(&url, MAX_JSON)?)
 }
 
+/// One sound by its Freesound id, with the API `key`.
+pub fn sound(key: &str, id: u64) -> Result<Hit, String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("Pega tu clave de Freesound".into());
+    }
+    let url = format!(
+        "https://freesound.org/apiv2/sounds/{id}/?fields=id,name,duration,license,username,previews&token={}",
+        encode(key)
+    );
+    let body = get(&url, MAX_JSON)?;
+    // the same shape as a search result, one of them
+    let mut wrapped = b"{\"results\":[".to_vec();
+    wrapped.extend_from_slice(&body);
+    wrapped.extend_from_slice(b"]}");
+    parse(&wrapped)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("Freesound no tiene el sonido {id}"))
+}
+
+/// `hit`'s preview downloaded to exactly `path` (once).
+pub fn download_to(path: &Path, hit: &Hit) -> Result<(), String> {
+    if !(hit.preview.starts_with("https://") && hit.preview.contains("freesound.org/")) {
+        return Err("no es un enlace de Freesound".into());
+    }
+    if std::fs::metadata(path).is_ok_and(|meta| meta.len() > 0) {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let bytes = get(&hit.preview, MAX_SOUND)?;
+    if bytes.is_empty() {
+        return Err("Freesound envió un archivo vacío".into());
+    }
+    let part = path.with_extension("part");
+    std::fs::write(&part, &bytes).map_err(|error| error.to_string())?;
+    std::fs::rename(&part, path).map_err(|error| error.to_string())
+}
+
 /// A name safe as a file name everywhere.
 fn safe(name: &str) -> String {
     let name: String = name

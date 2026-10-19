@@ -710,7 +710,7 @@
   "sounds.audioFiles": "Archivos de audio",
   "sounds.imported": "{0} sonidos agregados a Mis sonidos",
   "sounds.loading": "Cargando…",
-  "sounds.importMine": "Agregar mis sonidos o música",
+  "sounds.importMine": "Agregar mis sonidos",
   "sounds.folderHint": "Toca un sonido para escucharlo y + para ponerlo en el cursor. El banco es la carpeta TetalCut Sonidos (en Documentos del Mac y en Archivos del iPhone): cada carpeta que pongas ahí es una categoría. Los sonidos de TetalCut son libres de uso; si usas canciones comerciales, revisa los derechos antes de publicar.",
   "sounds.noResults": "No se encontró nada; prueba otras palabras (en inglés hay muchos más)",
   "sounds.searching": "Buscando en Freesound…",
@@ -719,5 +719,15 @@
   "sounds.keySave": "Guardar",
   "sounds.searchPlaceholder": "whoosh, applause, laugh, cash register…",
   "sounds.search": "Buscar",
-  "sounds.commercialOnly": "Solo sonidos de uso comercial (CC0 y CC BY)"
+  "sounds.commercialOnly": "Solo sonidos de uso comercial (CC0 y CC BY)",
+  "sounds.splitTitle": "Elige un compilado de sonidos",
+  "sounds.splitting": "Cortando el compilado en sonidos…",
+  "sounds.splitDone": "{0} sonidos cortados del compilado",
+  "sounds.splitCompilation": "Dividir un compilado",
+  "sounds.nameTaken": "Ya hay un sonido con ese nombre",
+  "sounds.rename": "Renombrar",
+  "sounds.deleteAgain": "Toca la papelera otra vez para borrarlo",
+  "sounds.working": "Procesando tus sonidos…",
+  "sounds.fetchingPopular": "Descargando el pack Populares de Freesound…",
+  "sounds.popularNeedsKey": "Para descargar Populares, pega tu clave de Freesound en la pestaña Buscar en Freesound."
 }

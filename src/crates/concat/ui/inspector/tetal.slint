@@ -158,6 +158,30 @@ export component SpeedCurvePanel inherits VerticalLayout {
     }
 }
 
+/// TetalCut: a small square icon button of the sound bank's rows.
+component SmallIcon inherits Rectangle {
+    in property <Glyph> glyph;
+    in property <bool> danger;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: root.danger ? #e5484d : touch.has-hover ? Theme.field-hover : transparent;
+
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        glyph: root.glyph;
+        size: 13px;
+        tint: root.danger ? white : Theme.fg-dim;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 /// TetalCut: a round icon button of the sound bank's rows.
 component RoundIcon inherits Rectangle {
     in property <Glyph> glyph;
@@ -300,7 +324,7 @@ export component SoundsDialog inherits Modal {
                 spacing: 4px;
 
                 for sound in Editor.sounds: Rectangle {
-                    height: 48px;
+                    height: sound.renaming ? 92px : 48px;
                     border-radius: Theme.r-xs;
                     background: sound.playing ? Theme.field-active : row-touch.has-hover ? Theme.field-hover : transparent;
 
@@ -309,52 +333,98 @@ export component SoundsDialog inherits Modal {
                         clicked => { Editor.sound-preview(sound.path); }
                     }
 
-                    HorizontalLayout {
+                    VerticalLayout {
                         padding-left: 6px;
                         padding-right: 6px;
-                        spacing: 10px;
+                        spacing: 4px;
 
-                        VerticalLayout {
-                            alignment: center;
-                            RoundIcon {
-                                glyph: sound.playing ? Glyph.pause : Glyph.play;
-                                lit: sound.playing;
-                                clicked => { Editor.sound-preview(sound.path); }
+                        HorizontalLayout {
+                            height: 48px;
+                            spacing: 8px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                RoundIcon {
+                                    glyph: sound.playing ? Glyph.pause : Glyph.play;
+                                    lit: sound.playing;
+                                    clicked => { Editor.sound-preview(sound.path); }
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: sound.name;
+                                    color: Theme.fg;
+                                    font-size: Theme.fs-lg;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: sound.loading ? I18n.t("sounds.loading") : sound.category;
+                                    color: Theme.fg-dim;
+                                    font-size: Theme.fs-sm;
+                                    overflow: elide;
+                                }
+                            }
+                            if sound.editable: VerticalLayout {
+                                alignment: center;
+                                SmallIcon {
+                                    glyph: Glyph.text-mark;
+                                    clicked => { Editor.sound-rename-begin(sound.renaming ? "" : sound.path); }
+                                }
+                            }
+                            if sound.editable: VerticalLayout {
+                                alignment: center;
+                                SmallIcon {
+                                    glyph: Glyph.trash;
+                                    danger: sound.deleting;
+                                    clicked => { Editor.sound-delete(sound.path); }
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                RoundIcon {
+                                    glyph: Glyph.plus;
+                                    clicked => { Editor.sound-add(sound.path); }
+                                }
                             }
                         }
-                        VerticalLayout {
-                            alignment: center;
-                            horizontal-stretch: 1;
-                            Text {
-                                text: sound.name;
-                                color: Theme.fg;
-                                font-size: Theme.fs-lg;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: sound.loading ? I18n.t("sounds.loading") : sound.category;
-                                color: Theme.fg-dim;
-                                font-size: Theme.fs-sm;
-                                overflow: elide;
-                            }
+                        if sound.deleting: Text {
+                            text: I18n.t("sounds.deleteAgain");
+                            color: #e5484d;
+                            font-size: Theme.fs-sm;
                         }
-                        VerticalLayout {
-                            alignment: center;
-                            RoundIcon {
-                                glyph: Glyph.plus;
-                                clicked => { Editor.sound-add(sound.path); }
-                            }
+                        if sound.renaming: QueryField {
+                            placeholder: sound.name;
+                            action: I18n.t("sounds.rename");
+                            accepted(text) => { Editor.sound-rename(sound.path, text); }
                         }
                     }
                 }
             }
         }
 
-        Button {
-            block: true;
-            glyph: Glyph.import;
-            label: I18n.t("sounds.importMine");
-            clicked => { Editor.sounds-import(); }
+        if Editor.sounds-note != "": Text {
+            text: Editor.sounds-note;
+            color: Theme.fg-dim;
+            font-size: Theme.fs-sm;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            Button {
+                horizontal-stretch: 1;
+                glyph: Glyph.import;
+                label: I18n.t("sounds.importMine");
+                clicked => { Editor.sounds-import(); }
+            }
+            Button {
+                horizontal-stretch: 1;
+                glyph: Glyph.split;
+                label: I18n.t("sounds.splitCompilation");
+                clicked => { Editor.sounds-split(); }
+            }
         }
         Text {
             text: I18n.t("sounds.folderHint");

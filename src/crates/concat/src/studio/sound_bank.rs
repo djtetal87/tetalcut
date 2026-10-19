@@ -37,7 +37,27 @@ const VIDEO: [&str; 5] = ["mp4", "mov", "m4v", "webm", "mkv"];
 /// The Populares pack: each sound's name in the bank and its Freesound id
 /// (free licences only - CC0, or CC BY, credited in the pack's Créditos.txt).
 const POPULARES: &[(&str, u64)] = &[
-    // POPULARES-LIST
+    ("Swish whoosh grande", 237980),
+    ("Noise whoosh", 425706),
+    ("Disparo con eco", 384252),
+    ("Whoosh", 60013),
+    ("Obturador Canon", 270435),
+    ("Fuwa (viento corto)", 719560),
+    ("Click botón", 342200),
+    ("Sci-fi whoosh", 274210),
+    ("Impacto", 376817),
+    ("Scratch de disco", 43404),
+    ("Mal presentimiento", 146434),
+    ("Glitch", 573189),
+    ("Cámara (click)", 170229),
+    ("Robot - máquina", 363251),
+    ("Subida (build up)", 261415),
+    ("Boom", 802074),
+    ("Pop", 202230),
+    ("Ding", 335908),
+    ("Risas", 124028),
+    ("Swoosh rápido", 389590),
+    ("Whoosh + golpe", 322250),
 ];
 
 /// Written once the built-in sounds have been put in the folder, so one the

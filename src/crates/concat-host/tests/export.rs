@@ -604,6 +604,18 @@ impl Studio {
         self.session.save(None).expect("saves the project");
         let reopened = Session::open(self.session.path(), self.session.settings())
             .unwrap_or_else(|error| panic!("{label}: the saved project does not reopen: {error}"));
+        {
+            let (a, b) = (reopened.flattened_clips(), self.session.flattened_clips());
+            if a != b {
+                for (x, y) in a.iter().zip(b.iter()) {
+                    if x != y {
+                        eprintln!("REOPENED start {} dur {} src {} track {} link {:?} fade {} {} tr {:?}\nLIVE start {} dur {} src {} track {} link {:?} fade {} {} tr {:?}", x.start, x.duration, x.source_start, x.track, x.link, x.fade_in, x.fade_out, x.transition.as_ref().map(|t| (&t.kind, t.duration)), y.start, y.duration, y.source_start, y.track, y.link, y.fade_in, y.fade_out, y.transition.as_ref().map(|t| (&t.kind, t.duration)));
+                        break;
+                    }
+                }
+                eprintln!("lens {} {}", a.len(), b.len());
+            }
+        }
         assert!(
             reopened.flattened_clips() == self.session.flattened_clips(),
             "{label}: the project flattens differently after a save and reopen"
@@ -2378,4 +2390,59 @@ fn consolidation_keeps_the_global_frame_grid_at_fractional_starts() {
             "frame {frame}: expected {expected:?}, got {got:?}"
         );
     }
+}
+
+
+/// TetalCut: a real recording through the automatic edit's cut and the
+/// export, from `TC_SRC` cut to the spans in `TC_SPANS` ("a-b,c-d,...").
+/// Run by hand: it reads a file only the person who has it has.
+#[test]
+#[ignore]
+fn a_recording_cut_to_its_spoken_spans_exports_with_its_picture() {
+    let Ok(source) = std::env::var("TC_SRC") else { return };
+    let spans: Vec<[f64; 2]> = std::env::var("TC_SPANS")
+        .unwrap()
+        .split(',')
+        .map(|pair| {
+            let (a, b) = pair.split_once('-').unwrap();
+            [a.parse().unwrap(), b.parse().unwrap()]
+        })
+        .collect();
+    let scratch = Scratch::new("keep-spans");
+    let mut studio = Studio::new(scratch.path(), "KeepSpans", video(270, 480, 24, 1));
+    let media = studio.import(Path::new(&source));
+    let clip = studio
+        .apply(Command::AddClipAtFirstFree { media_id: media, start: 0.0 })
+        .expect("the clip has an id");
+    if std::env::var("TC_DETACH").is_ok() {
+        studio.apply(Command::DetachAudio { clip_id: clip.clone() });
+    }
+    studio.apply(Command::KeepSpans {
+        clip_id: clip,
+        spans,
+        transition: Some(Transition { id: "concat.dissolve".to_owned(), duration: 0.1 }),
+    });
+    for c in &studio.project().active().clips {
+        eprintln!("{:?} {} track {} start {:.3} dur {:.3} src {:.3} tr {:?}", c.kind, c.id, c.track_id, c.start, c.duration, c.source_start, c.transition_in.as_ref().map(|t| t.duration));
+    }
+    let exported = studio.export("keep spans");
+    let fps = 24.0;
+    let mut dark = Vec::new();
+    for i in 0..exported.frames.len() {
+        let frame = &exported.frames[i];
+        let mut sum = 0u64;
+        let mut n = 0u64;
+        for y in (0..frame.height()).step_by(23) {
+            for x in (0..frame.width()).step_by(23) {
+                let [r, g, b, _] = frame.pixel(x, y).unwrap();
+                sum += u64::from(r) + u64::from(g) + u64::from(b);
+                n += 1;
+            }
+        }
+        if sum / n.max(1) < 20 {
+            dark.push(i as f64 / fps);
+        }
+    }
+    eprintln!("dark frames: {} first {:?}", dark.len(), dark.first());
+    assert!(dark.is_empty(), "black from {:?}", dark.first());
 }

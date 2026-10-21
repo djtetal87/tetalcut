@@ -49,6 +49,13 @@ static CURRENT: OnceLock<PathBuf> = OnceLock::new();
 
 /// Where the logs are kept.
 pub fn folder(dirs: &AppDirs) -> PathBuf {
+    // TetalCut: on an iPhone, in Documents, where the Files app shows it,
+    // so a run that went wrong can be sent over.
+    if cfg!(target_os = "ios")
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        return PathBuf::from(home).join("Documents").join("TetalCut Registros");
+    }
     dirs.data.join("logs")
 }
 

@@ -850,9 +850,11 @@ fn keep_spans(
     }
     let whole = clip.duration;
     // Tidy: inside the clip, in order, apart, and long enough to be clips.
+    // Microseconds: a time the document writes and reads back the same.
+    let even = |seconds: f64| (seconds * 1e6).round() / 1e6;
     let mut kept: Vec<(f64, f64)> = spans
         .iter()
-        .map(|[a, b]| (a.max(0.0), b.min(whole)))
+        .map(|[a, b]| (even(a.max(0.0)), even(b.min(whole))))
         .filter(|(a, b)| a.is_finite() && b.is_finite() && b - a >= MIN_CLIP_DURATION)
         .collect();
     kept.sort_by(|x, y| x.0.total_cmp(&y.0));
@@ -905,9 +907,9 @@ fn keep_spans(
             if index > 0 {
                 piece.id = mint.next("c");
             }
-            piece.start = at;
-            piece.duration = b - a;
-            piece.source_start = member.source_start + a * member.speed;
+            piece.start = even(at);
+            piece.duration = even(b - a);
+            piece.source_start = even(member.source_start + a * member.speed);
             piece.rewindow_keys(whole, *a, *b);
             if index > 0 {
                 piece.fade_in = 0.0;
@@ -945,7 +947,8 @@ fn keep_spans(
     timeline.clips.retain(|other| !ids.contains(&other.id));
     for other in timeline.clips.iter_mut() {
         if lanes.contains(&other.track_id) && other.start >= end - 1e-6 {
-            Arc::make_mut(other).start -= removed;
+            let moved = Arc::make_mut(other);
+            moved.start = even(moved.start - removed);
         }
     }
     let place = place.min(timeline.clips.len());

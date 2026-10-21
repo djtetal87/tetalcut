@@ -1701,6 +1701,46 @@ fn render_picture(
                     geometry.get(&layer.clip),
                     shapes_at(&shapes, layer, time, rate),
                 ));
+            } else if !stills.contains(&layer.clip) {
+                // TetalCut: the paced reader ran dry while the plan still
+                // shows the clip - a phone's export went black for the rest
+                // of a cut-up clip this way. The frame is sought by its own
+                // time instead, and the paced reader opened afresh there,
+                // so the picture carries on rather than going black.
+                log::warn!(
+                    "export: {} ran out at {:.3}s of its source; seeking instead",
+                    layer.media.display(),
+                    layer.source_time.as_f64()
+                );
+                decoders.remove(&layer.clip);
+                let (decode_width, decode_height) = decode_sizes
+                    .get(&layer.clip)
+                    .copied()
+                    .unwrap_or((request.width, request.height));
+                if let Ok(frame) = sought.frame_at(
+                    &layer.media,
+                    layer.source_time,
+                    decode_width,
+                    decode_height,
+                    false,
+                    None,
+                    None,
+                    ranges.get(&layer.clip).copied(),
+                    !cutouts.contains_key(&layer.clip),
+                ) {
+                    let frame = cutouts
+                        .get(&layer.clip)
+                        .and_then(|job| job.cut(&frame, layer.source_time))
+                        .map_or(frame, std::sync::Arc::new);
+                    layers.push(filled(
+                        layer,
+                        frame,
+                        tracks.get(&layer.clip).copied().unwrap_or(0),
+                        passes_at(&chains, &reveal_maps, &timeline, layer.clip, time),
+                        geometry.get(&layer.clip),
+                        shapes_at(&shapes, layer, time, rate),
+                    ));
+                }
             }
         }
 

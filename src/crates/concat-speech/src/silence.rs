@@ -10,8 +10,8 @@
 //! the loudest frames of this clip, so a noisy room and a quiet one are
 //! both judged against themselves. A run of quiet frames long enough to be
 //! a pause is cut, leaving a little air either side so a word is never
-//! clipped; a pause any word is said in (whisper heard something soft
-//! there) is kept whole.
+//! clipped. The transcriber's word times are not trusted for this - whisper
+//! stretches a word over the pause after it - so the sound alone decides.
 
 use concat_media::{AudioDecoder, AudioOptions, SampleFormat};
 
@@ -32,9 +32,11 @@ pub struct Pauses {
 impl Default for Pauses {
     fn default() -> Self {
         Pauses {
-            shortest: 0.45,
-            lead: 0.12,
-            tail: 0.18,
+            // TetalCut: short enough to take out the mini pauses of a take
+            // spoken in bits, with only a breath of air left either side.
+            shortest: 0.3,
+            lead: 0.08,
+            tail: 0.12,
         }
     }
 }
@@ -65,10 +67,8 @@ pub fn read(path: &str, start: f64, window: f64, stream: Option<u32>) -> Result<
 }
 
 /// The spans of `samples` (at `rate`) to keep, in seconds from its start:
-/// everything but its pauses. `words` are the transcriber's words, as
-/// `(start, end)` seconds; a quiet run with a word said in it is not a
-/// pause. The whole when nothing can be told apart.
-pub fn keep(samples: &[f32], rate: u32, words: &[(f64, f64)], pauses: Pauses) -> Vec<(f64, f64)> {
+/// everything but its pauses. The whole when nothing can be told apart.
+pub fn keep(samples: &[f32], rate: u32, pauses: Pauses) -> Vec<(f64, f64)> {
     let length = samples.len() as f64 / f64::from(rate.max(1));
     if length <= 0.0 {
         return Vec::new();
@@ -115,12 +115,6 @@ pub fn keep(samples: &[f32], rate: u32, words: &[(f64, f64)], pauses: Pauses) ->
     for (a, b) in quiet {
         let (start, end) = (a as f64 * FRAME, (b as f64 * FRAME).min(length));
         if end - start < pauses.shortest {
-            continue;
-        }
-        if words.iter().any(|(w0, w1)| {
-            let middle = (w0 + w1) / 2.0;
-            middle > start && middle < end
-        }) {
             continue;
         }
         let from = if start <= 0.0 { 0.0 } else { start + pauses.tail };
@@ -185,28 +179,23 @@ mod tests {
 
     #[test]
     fn pauses_are_cut_with_air_left_around_the_voice() {
-        let samples = take(&[(false, 1.0), (true, 2.0), (false, 1.0), (true, 1.0), (false, 0.3), (true, 1.0)]);
-        let kept = keep(&samples, RATE, &[], Pauses::default());
-        // the leading second goes up to the lead; the pause between the
-        // first two words loses all but the air; the short one stays.
-        assert_eq!(kept.len(), 2, "{kept:?}");
-        assert!((kept[0].0 - 0.88).abs() < 0.05, "{kept:?}");
-        assert!((kept[0].1 - 3.18).abs() < 0.05, "{kept:?}");
-        assert!((kept[1].0 - 3.88).abs() < 0.05, "{kept:?}");
-        assert!((kept[1].1 - 6.3).abs() < 0.05, "{kept:?}");
-    }
-
-    #[test]
-    fn a_pause_with_a_word_in_it_is_kept() {
-        let samples = take(&[(true, 1.0), (false, 1.0), (true, 1.0)]);
-        let kept = keep(&samples, RATE, &[(1.4, 1.6)], Pauses::default());
-        assert_eq!(kept, vec![(0.0, 3.0)]);
+        let samples = take(&[(false, 1.0), (true, 2.0), (false, 1.0), (true, 1.0), (false, 0.4), (true, 1.0), (false, 0.2), (true, 1.0)]);
+        let kept = keep(&samples, RATE, Pauses::default());
+        // the leading second goes up to the lead; each pause loses all but
+        // the air, a mini one too; one shorter than a pause stays.
+        assert_eq!(kept.len(), 3, "{kept:?}");
+        assert!((kept[0].0 - 0.92).abs() < 0.05, "{kept:?}");
+        assert!((kept[0].1 - 3.12).abs() < 0.05, "{kept:?}");
+        assert!((kept[1].0 - 3.92).abs() < 0.05, "{kept:?}");
+        assert!((kept[1].1 - 5.12).abs() < 0.05, "{kept:?}");
+        assert!((kept[2].0 - 5.32).abs() < 0.05, "{kept:?}");
+        assert!((kept[2].1 - 7.6).abs() < 0.05, "{kept:?}");
     }
 
     #[test]
     fn a_flat_recording_is_kept_whole() {
         let samples = take(&[(true, 3.0)]);
-        assert_eq!(keep(&samples, RATE, &[], Pauses::default()), vec![(0.0, 3.0)]);
+        assert_eq!(keep(&samples, RATE, Pauses::default()), vec![(0.0, 3.0)]);
     }
 
     #[test]

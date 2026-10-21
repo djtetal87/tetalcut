@@ -452,12 +452,7 @@ impl CaptionsPane {
                         request.window,
                         request.audio_stream,
                     )?;
-                    let words: Vec<(f64, f64)> = segments
-                        .iter()
-                        .flat_map(timed_words)
-                        .map(|word| (word.start, word.end))
-                        .collect();
-                    let kept = silence::keep(&samples, silence::RATE, &words, silence::Pauses::default());
+                    let kept = silence::keep(&samples, silence::RATE, silence::Pauses::default());
                     Ok((segments, kept))
                 },
                 |studio, _, _, result| {
@@ -849,10 +844,14 @@ const AUTO_TRANSITION_SECONDS: f64 = 0.1;
 /// left dropped too.
 fn moved_segments(segments: &[Segment], kept: &[(f64, f64)]) -> Vec<Segment> {
     let place = |at: f64| -> Option<(f64, f64)> {
-        // The span the moment is in, as (where it lands, where that span ends).
+        // The span the moment is in, as (where it lands, where that span
+        // ends). A moment in a cut - whisper's times are loose, and a word
+        // it heard in a pause is a word said just after it - goes to the
+        // start of the span after the cut, so no word is lost.
         let mut before = 0.0;
         for (from, to) in kept {
-            if at >= *from && at <= *to {
+            if at <= *to {
+                let at = at.max(*from);
                 return Some((before + at - from, before + to - from));
             }
             before += to - from;
@@ -866,7 +865,8 @@ fn moved_segments(segments: &[Segment], kept: &[(f64, f64)]) -> Vec<Segment> {
                 .into_iter()
                 .filter_map(|word| {
                     let (start, span_end) = place(word.start)?;
-                    let end = silence::moved(kept, word.end)
+                    let end = place(word.end)
+                        .map(|(end, _)| end)
                         .filter(|end| *end >= start)
                         .unwrap_or(span_end)
                         .min(span_end);

@@ -72,6 +72,12 @@ pub fn path_for(
     if hdr {
         "hdr".hash(&mut hasher);
     }
+    // TetalCut: a phone's HDR proxies came out magenta (its ten-bit HEVC
+    // encoder was handed what it does not take); they are written as SDR
+    // now, under new names, so the broken copies are written again.
+    if cfg!(target_os = "ios") {
+        "sdr-on-phone".hash(&mut hasher);
+    }
     if let Ok(modified) = meta.modified()
         && let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH)
     {
@@ -205,7 +211,12 @@ pub fn write(
         .as_ref()
         .map(|video| (video.frame_rate, video.signal))
         .ok_or_else(|| "no video stream".to_owned())?;
-    let hdr = matches!(signal, Signal::Hlg | Signal::Pq);
+    // TetalCut: on an iPhone an HDR file's proxy is written as SDR - the
+    // picture tone-mapped by the decoder's own LUT, as every thumbnail is -
+    // because the phone's ten-bit HEVC proxies came out magenta. A proxy is
+    // only what plays while editing; the paused frame and the export read
+    // the file itself, in its own light.
+    let hdr = matches!(signal, Signal::Hlg | Signal::Pq) && !cfg!(target_os = "ios");
     if let Some(folder) = target.parent() {
         std::fs::create_dir_all(folder)
             .map_err(|error| format!("{}: {error}", folder.display()))?;

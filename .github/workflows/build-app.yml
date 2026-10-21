@@ -631,7 +631,14 @@ jobs:
             codesign --force --deep -s - "$app"
           fi
 
-          hdiutil create -volname TetalCut -srcfolder "$app" -ov -format UDZO "$dmg"
+          # TetalCut: the disk opens on the app beside a link to
+          # Applications, to drag it across - the install every Mac DMG
+          # offers - rather than on the app alone.
+          dmgroot="$RUNNER_TEMP/dmgroot"
+          rm -rf "$dmgroot" && mkdir -p "$dmgroot"
+          ditto "$app" "$dmgroot/$(basename "$app")"
+          ln -s /Applications "$dmgroot/Applications"
+          hdiutil create -volname TetalCut -srcfolder "$dmgroot" -ov -format UDZO "$dmg"
 
           if [ -n "${APPLE_ID}" ] && [ -n "${TEAM_ID}" ] && [ -n "${APP_PASSWORD}" ] && [ -n "${IDENTITY}" ]; then
             codesign --force --timestamp -s "$IDENTITY" "$dmg"

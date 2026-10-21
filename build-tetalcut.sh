@@ -129,7 +129,12 @@ codesign --force --deep -s - "$APP"
 
 DMG="$OUT/TetalCut-$VERSION-macos-$ARCH.dmg"
 rm -f "$DMG"
-hdiutil create -volname TetalCut -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+# The disk opens on the app beside a link to Applications, to drag it across.
+DMGROOT="$(mktemp -d)"
+ditto "$APP" "$DMGROOT/$(basename "$APP")"
+ln -s /Applications "$DMGROOT/Applications"
+hdiutil create -volname TetalCut -srcfolder "$DMGROOT" -ov -format UDZO "$DMG" >/dev/null
+rm -rf "$DMGROOT"
 echo "==> DMG: $DMG"
 
 if [ "$INSTALL" = 1 ]; then

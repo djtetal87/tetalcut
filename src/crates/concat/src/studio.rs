@@ -7802,7 +7802,7 @@ impl Studio {
         // before it. In the document's order a clip added earlier but
         // placed later was drawn under its neighbour, which hid half the
         // transition and its button.
-        let mut in_time: Vec<&Clip> = timeline.clips.iter().collect();
+        let mut in_time: Vec<&Clip> = timeline.clips.iter().map(|clip| clip.as_ref()).collect();
         in_time.sort_by(|a, b| a.start.total_cmp(&b.start));
         sync(
             &models.clips,

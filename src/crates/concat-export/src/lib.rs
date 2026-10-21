@@ -568,13 +568,22 @@ fn resolve_transitions(clips: &mut Vec<ExportClip>, rate: FrameRate) -> Vec<Tran
     resolve_transitions_at(clips, rate, 0.0)
 }
 
+/// How many slots each lane gets once transitions are resolved: its own,
+/// and one more above for each transition in a row on it.
+const LANE_SLOTS: usize = 1000;
+
 fn resolve_transitions_at(
     clips: &mut Vec<ExportClip>,
     rate: FrameRate,
     origin: f64,
 ) -> Vec<TransitionSpan> {
+    // TetalCut: spread far apart, not just doubled. A run of cuts each
+    // with a transition stacks every incoming clip one slot above the
+    // last - the automatic edit's twenty dissolves in a row climbed
+    // through the lanes above and landed a piece of video on a caption's
+    // lane, where the caption took its place and the picture went black.
     for clip in clips.iter_mut() {
-        clip.track *= 2;
+        clip.track *= LANE_SLOTS;
     }
     let mut spans: Vec<TransitionSpan> = Vec::new();
 
@@ -3575,7 +3584,27 @@ mod tests {
         ];
         resolve_transitions(&mut clips, FrameRate::THIRTY);
         assert_eq!(clips[0].track, 0);
-        assert_eq!(clips[1].track, 6);
+        assert_eq!(clips[1].track, 3 * LANE_SLOTS);
+    }
+
+    /// TetalCut: transitions on every cut of a lane, in a row, keep each
+    /// piece below the lane above, however many there are.
+    #[test]
+    fn a_run_of_transitions_stays_under_the_lane_above() {
+        let mut clips: Vec<ExportClip> = (0..30)
+            .map(|i| {
+                let mut piece = clip("video", 0, f64::from(i), 1.0, 5.0);
+                piece.media_duration = Some(100.0);
+                if i > 0 {
+                    piece.transition = spec("concat.dissolve", 0.1);
+                }
+                piece
+            })
+            .collect();
+        clips.push(clip("image", 1, 0.0, 30.0, 0.0));
+        resolve_transitions(&mut clips, FrameRate::THIRTY);
+        let above = clips.iter().find(|c| c.kind == ClipKind::Image).unwrap().track;
+        assert!(clips.iter().filter(|c| c.kind == ClipKind::Video).all(|c| c.track < above));
     }
 
     #[test]

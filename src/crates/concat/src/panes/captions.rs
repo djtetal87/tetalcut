@@ -515,6 +515,27 @@ impl CaptionsPane {
             base.as_ref(),
             accent.as_ref(),
         );
+        // Not past the edited clip's end: a caption lingering after the last
+        // word would run the timeline on over black.
+        let length: f64 = kept.iter().map(|(a, b)| b - a).sum::<f64>() / speed;
+        let end = subject.start + length;
+        let captions: Vec<Command> = captions
+            .into_iter()
+            .filter_map(|mut command| {
+                let (start, duration) = match &mut command {
+                    Command::AddTextClip { start, duration, .. }
+                    | Command::AddKeyedTextClip { start, duration, .. } => (*start, duration),
+                    _ => return Some(command),
+                };
+                if start >= end - 0.05 {
+                    return None;
+                }
+                if let Some(duration) = duration.as_mut() {
+                    *duration = duration.min(end - start);
+                }
+                Some(command)
+            })
+            .collect();
         let count = captions.len();
         let cuts = if whole { 0 } else { kept.len().saturating_sub(1) };
         commands.extend(captions);

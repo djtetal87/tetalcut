@@ -2414,6 +2414,12 @@ fn a_recording_cut_to_its_spoken_spans_exports_with_its_picture() {
     let clip = studio
         .apply(Command::AddClipAtFirstFree { media_id: media, start: 0.0 })
         .expect("the clip has an id");
+    if let Ok(trim) = std::env::var("TC_TRIM") {
+        let trim: f64 = trim.parse().unwrap();
+        studio.apply(Command::TrimClip { clip_id: clip.clone(), edge: TrimEdge::Start, delta: trim, ripple: false });
+        let track = studio.project().active().tracks[0].id.clone();
+        studio.apply(Command::MoveClips { moves: vec![ClipMove { clip_id: clip.clone(), start: 0.0, track_id: track }] });
+    }
     if std::env::var("TC_DETACH").is_ok() {
         studio.apply(Command::DetachAudio { clip_id: clip.clone() });
     }
@@ -2422,6 +2428,23 @@ fn a_recording_cut_to_its_spoken_spans_exports_with_its_picture() {
         spans,
         transition: Some(Transition { id: "concat.dissolve".to_owned(), duration: 0.1 }),
     });
+    if std::env::var("TC_CAPTIONS").is_ok() {
+        let end = studio.end();
+        let mut at = 0.0;
+        let mut commands = Vec::new();
+        while at < end {
+            commands.push(Command::AddTextClip {
+                track_id: None,
+                above: true,
+                start: at,
+                style: Some(concat_project::model::TextStyle { content: "HOLA".to_owned(), ..Default::default() }),
+                duration: Some(0.4),
+                offset_y: Some(0.35),
+            });
+            at += 0.45;
+        }
+        studio.apply(Command::Batch { commands });
+    }
     for c in &studio.project().active().clips {
         eprintln!("{:?} {} track {} start {:.3} dur {:.3} src {:.3} tr {:?}", c.kind, c.id, c.track_id, c.start, c.duration, c.source_start, c.transition_in.as_ref().map(|t| t.duration));
     }

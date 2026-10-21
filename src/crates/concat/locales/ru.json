@@ -310,6 +310,8 @@
   "phone.addATitle": "Добавить титр",
   "phone.back": "Назад",
   "phone.captions": "Субтитры",
+  "phone.filterOnClip": "Фильтр применяется только к выбранному клипу.",
+  "phone.restoreAudio": "Вернуть звук",
   "phone.duplicate": "Дублировать",
   "phone.edit": "Правка",
   "phone.emptyLanes": "Коснитесь «Медиа» внизу, чтобы добавить видео; оно появится здесь.",

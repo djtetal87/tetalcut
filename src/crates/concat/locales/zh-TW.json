@@ -310,6 +310,8 @@
   "phone.addATitle": "新增標題",
   "phone.back": "回上層",
   "phone.captions": "字幕",
+  "phone.filterOnClip": "濾鏡只套用到所選片段。",
+  "phone.restoreAudio": "恢復音訊",
   "phone.duplicate": "複製",
   "phone.edit": "編輯",
   "phone.emptyLanes": "點一下下方的「媒體」匯入影片，它會出現在這裡。",

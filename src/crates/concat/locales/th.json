@@ -310,6 +310,8 @@
   "phone.addATitle": "เพิ่มไตเติล",
   "phone.back": "กลับ",
   "phone.captions": "คำบรรยาย",
+  "phone.filterOnClip": "ฟิลเตอร์จะใช้กับคลิปที่เลือกเท่านั้น",
+  "phone.restoreAudio": "กู้คืนเสียง",
   "phone.duplicate": "ทำสำเนา",
   "phone.edit": "แก้ไข",
   "phone.emptyLanes": "แตะสื่อด้านล่างเพื่อนำวิดีโอเข้ามา วิดีโอจะมาอยู่ที่นี่",

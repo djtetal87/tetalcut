@@ -310,6 +310,8 @@
   "phone.addATitle": "Başlık ekle",
   "phone.back": "Geri",
   "phone.captions": "Altyazı",
+  "phone.filterOnClip": "Filtre yalnızca seçili klibe uygulanır.",
+  "phone.restoreAudio": "Sesi geri getir",
   "phone.duplicate": "Çoğalt",
   "phone.edit": "Düzenle",
   "phone.emptyLanes": "Bir video getirmek için aşağıdaki Medya’ya dokunun; buraya gelir.",

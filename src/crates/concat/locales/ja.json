@@ -310,6 +310,8 @@
   "phone.addATitle": "タイトルを追加",
   "phone.back": "戻る",
   "phone.captions": "字幕",
+  "phone.filterOnClip": "フィルターは選択中のクリップだけに適用されます。",
+  "phone.restoreAudio": "音声を戻す",
   "phone.duplicate": "複製",
   "phone.edit": "編集",
   "phone.emptyLanes": "下の「メディア」をタップして動画を読み込むと、ここに置かれます。",

@@ -310,6 +310,8 @@
   "phone.addATitle": "Dodaj tytuł",
   "phone.back": "Wstecz",
   "phone.captions": "Napisy",
+  "phone.filterOnClip": "Filtr zostanie zastosowany tylko do zaznaczonego klipu.",
+  "phone.restoreAudio": "Przywróć dźwięk",
   "phone.duplicate": "Duplikuj",
   "phone.edit": "Edytuj",
   "phone.emptyLanes": "Stuknij Multimedia poniżej, aby dodać wideo; pojawi się tutaj.",

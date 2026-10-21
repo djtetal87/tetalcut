@@ -310,6 +310,8 @@
   "phone.addATitle": "Додати титр",
   "phone.back": "Назад",
   "phone.captions": "Субтитри",
+  "phone.filterOnClip": "Фільтр застосовується лише до вибраного кліпу.",
+  "phone.restoreAudio": "Повернути звук",
   "phone.duplicate": "Дублювати",
   "phone.edit": "Редагувати",
   "phone.emptyLanes": "Торкніться «Медіа» внизу, щоб додати відео; воно з’явиться тут.",

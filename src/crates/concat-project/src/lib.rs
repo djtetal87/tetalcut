@@ -2357,6 +2357,82 @@ mod tests {
         assert_eq!(editor.project().active().clips[0].speed, 0.0625);
     }
 
+    /// TetalCut: a video whose detached sound was deleted gets its own
+    /// sound back from Reattach, which has nothing left to merge.
+    #[test]
+    fn reattach_restores_the_sound_of_a_video_whose_sound_was_deleted() {
+        let (mut editor, _, clip_id) = fixture();
+        let sound_id = editor
+            .apply(Command::DetachAudio {
+                clip_id: clip_id.clone(),
+            })
+            .expect("detaches")
+            .created_id
+            .expect("sound clip");
+        editor
+            .apply(Command::RemoveClips {
+                clip_ids: vec![sound_id],
+                ripple: false,
+            })
+            .expect("removes");
+        let outcome = editor
+            .apply(Command::ReattachAudio {
+                clip_id: clip_id.clone(),
+            })
+            .expect("restores");
+        assert!(outcome.applied);
+        let video = editor.project().active().clip(&clip_id).expect("video");
+        assert_eq!(video.muted, None);
+        assert!(video.volume > 0.0);
+    }
+
+    /// TetalCut: a filter laid over the cut sits just above the video,
+    /// never under it where it filters nothing, and gets a lane of its own
+    /// there when every lane is busy - under the captions, not over them.
+    #[test]
+    fn a_filter_goes_just_above_the_picture() {
+        let (mut editor, media_id, clip_id) = fixture();
+        let _ = media_id;
+        // Captions on the lane above the video, the rest of the lanes empty.
+        let tracks: Vec<String> = editor
+            .project()
+            .active()
+            .tracks
+            .iter()
+            .map(|track| track.id.clone())
+            .collect();
+        editor
+            .apply(Command::AddTextClip {
+                track_id: Some(tracks[1].clone()),
+                above: false,
+                start: 0.0,
+                style: None,
+                duration: Some(10.0),
+                offset_y: None,
+            })
+            .expect("adds a caption");
+        let layer = editor
+            .apply(Command::AddLayerClip {
+                track_id: None,
+                start: 0.0,
+                duration: Some(5.0),
+                effect_id: "concat.warm".to_owned(),
+                name: String::new(),
+            })
+            .expect("adds the filter")
+            .created_id
+            .expect("id");
+        let timeline = editor.project().active();
+        let row = |id: &str| {
+            let track = &timeline.clip(id).expect("clip").track_id;
+            timeline.tracks.iter().position(|t| &t.id == track).expect("lane")
+        };
+        assert_eq!(row(&clip_id), 0);
+        assert_eq!(row(&layer), 1, "right above the video");
+        assert_eq!(timeline.tracks.len(), tracks.len() + 1, "a lane put in for it");
+        assert!(row(&layer) < timeline.tracks.iter().position(|t| t.id == tracks[1]).unwrap());
+    }
+
     #[test]
     fn detach_and_reattach_round_trip_the_sound() {
         let (mut editor, _, clip_id) = fixture();

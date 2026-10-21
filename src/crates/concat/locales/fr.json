@@ -310,6 +310,8 @@
   "phone.addATitle": "Ajouter un titre",
   "phone.back": "Retour",
   "phone.captions": "Sous-titres",
+  "phone.filterOnClip": "Le filtre s'applique uniquement au clip sélectionné.",
+  "phone.restoreAudio": "Récupérer l'audio",
   "phone.duplicate": "Dupliquer",
   "phone.edit": "Modifier",
   "phone.emptyLanes": "Touchez Médias ci-dessous pour importer une vidéo ; elle arrivera ici.",

@@ -310,6 +310,8 @@
   "phone.addATitle": "Thêm tiêu đề",
   "phone.back": "Quay lại",
   "phone.captions": "Phụ đề",
+  "phone.filterOnClip": "Bộ lọc chỉ áp dụng cho clip đã chọn.",
+  "phone.restoreAudio": "Khôi phục âm thanh",
   "phone.duplicate": "Nhân bản",
   "phone.edit": "Chỉnh sửa",
   "phone.emptyLanes": "Nhấn Phương tiện bên dưới để thêm video; video sẽ xuất hiện ở đây.",

@@ -310,6 +310,8 @@
   "phone.addATitle": "إضافة عنوان",
   "phone.back": "رجوع",
   "phone.captions": "تسميات توضيحية",
+  "phone.filterOnClip": "يُطبَّق المرشح على المقطع المحدد فقط.",
+  "phone.restoreAudio": "استعادة الصوت",
   "phone.duplicate": "تكرار",
   "phone.edit": "تحرير",
   "phone.emptyLanes": "انقر على الوسائط بالأسفل لإحضار فيديو؛ سيظهر هنا.",

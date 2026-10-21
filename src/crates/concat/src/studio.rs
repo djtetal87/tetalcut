@@ -7084,6 +7084,9 @@ impl Studio {
         (
             video && !detached,
             (video && detached)
+                // TetalCut: its sound was taken off and then deleted; the
+                // file still has it, and Reattach unmutes the picture.
+                || (video && clip.muted == Some(true))
                 || (clip.kind == model::ClipKind::Audio && clip.detached_from.is_some()),
         )
     }
@@ -7996,6 +7999,17 @@ impl Studio {
         editor.set_picture_selected(picture_selected);
         editor.set_freezable(freezable);
         editor.set_reversible(reversible);
+        let (detachable, reattachable) = self
+            .sole_selection()
+            .and_then(|id| self.clip(&id))
+            .filter(|clip| !self.locked(&clip.track_id))
+            .map(|clip| {
+                let (detach, reattach) = self.sound_placement(clip);
+                (detach && self.clip_has_sound(clip), reattach)
+            })
+            .unwrap_or_default();
+        editor.set_sound_detachable(detachable);
+        editor.set_sound_reattachable(reattachable);
         editor.set_merge_label(self.merge_label().into());
         editor.set_merge_blocked_because(match self.merge_blocked() {
             Some(reason) => reason.into(),
@@ -10323,7 +10337,9 @@ impl Studio {
             "ripple-delete" => self.ripple_delete_selected(),
             // Copy takes the whole selection; see `copy_clips`.
             "copy" => self.copy_clips(None),
-            "duplicate" | "mute" => {
+            // TetalCut: the phone's sound buttons take the clip's own
+            // verbs, the ones the long-press menu offers.
+            "duplicate" | "mute" | "detach" | "reattach" => {
                 if let Some(id) = self.sole_selection() {
                     self.clip_action(&id, action);
                 }

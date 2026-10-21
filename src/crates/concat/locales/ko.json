@@ -310,6 +310,8 @@
   "phone.addATitle": "제목 추가",
   "phone.back": "뒤로",
   "phone.captions": "자막",
+  "phone.filterOnClip": "필터는 선택한 클립에만 적용됩니다.",
+  "phone.restoreAudio": "오디오 복구",
   "phone.duplicate": "복제",
   "phone.edit": "편집",
   "phone.emptyLanes": "아래의 미디어를 탭해 영상을 가져오면 여기에 놓입니다.",

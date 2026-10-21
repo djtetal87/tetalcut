@@ -310,6 +310,8 @@
   "phone.addATitle": "Add a title",
   "phone.back": "Back",
   "phone.captions": "Captions",
+  "phone.filterOnClip": "The filter goes on the selected clip only.",
+  "phone.restoreAudio": "Restore audio",
   "phone.duplicate": "Duplicate",
   "phone.edit": "Edit",
   "phone.emptyLanes": "Tap Media below to bring in a video; it lands here.",

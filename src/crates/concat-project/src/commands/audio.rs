@@ -126,7 +126,21 @@ pub(super) fn apply(
                 .map(|other| Clip::clone(other))
                 .collect();
             if sounds.is_empty() {
-                return Ok(Outcome::default());
+                // TetalCut: the sound was detached and then deleted. The
+                // picture still has it in its file: putting it back is
+                // unmuting the picture, at a level that can be heard.
+                let video = timeline.clip_mut(&video_id).expect("checked above");
+                if video.muted != Some(true) {
+                    return Ok(Outcome::default());
+                }
+                video.muted = None;
+                if video.volume <= 0.0 {
+                    video.volume = 1.0;
+                }
+                return Ok(Outcome {
+                    created_id: None,
+                    applied: true,
+                });
             }
             // A set, not a Vec: the retain below tests every clip on the
             // timeline against it.

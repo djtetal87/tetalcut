@@ -310,6 +310,8 @@
   "phone.addATitle": "Een titel toevoegen",
   "phone.back": "Terug",
   "phone.captions": "Ondertitels",
+  "phone.filterOnClip": "Het filter geldt alleen voor de geselecteerde clip.",
+  "phone.restoreAudio": "Audio herstellen",
   "phone.duplicate": "Dupliceren",
   "phone.edit": "Bewerken",
   "phone.emptyLanes": "Tik hieronder op Media om een video toe te voegen; die komt hier terecht.",

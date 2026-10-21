@@ -310,6 +310,8 @@
   "phone.addATitle": "افزودن عنوان",
   "phone.back": "بازگشت",
   "phone.captions": "زیرنویس",
+  "phone.filterOnClip": "فیلتر فقط روی کلیپ انتخاب‌شده اعمال می‌شود.",
+  "phone.restoreAudio": "بازیابی صدا",
   "phone.duplicate": "تکثیر",
   "phone.edit": "ویرایش",
   "phone.emptyLanes": "برای آوردن یک ویدیو روی «رسانه» در پایین بزنید؛ اینجا قرار می‌گیرد.",

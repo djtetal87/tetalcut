@@ -310,6 +310,8 @@
   "phone.addATitle": "Dodaj naslov",
   "phone.back": "Natrag",
   "phone.captions": "Titlovi",
+  "phone.filterOnClip": "Filtar se primjenjuje samo na odabrani isječak.",
+  "phone.restoreAudio": "Vrati zvuk",
   "phone.duplicate": "Dupliciraj",
   "phone.edit": "Uredi",
   "phone.emptyLanes": "Dodirni Mediji ispod da uvezeš video; pojavit će se ovdje.",

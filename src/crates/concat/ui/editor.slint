@@ -414,6 +414,10 @@ export global Editor {
     in-out property <bool> picture-selected;
     in-out property <bool> freezable;
     in-out property <bool> reversible;
+    /// TetalCut: the one selected clip's sound can come off its picture,
+    /// or can be put back - joined again, or restored once deleted.
+    in-out property <bool> sound-detachable;
+    in-out property <bool> sound-reattachable;
     in-out property <float> playhead;
     /// The selected clip's keys, as instants on the timeline: the ruler's
     /// diamonds. Empty unless exactly one clip is selected.

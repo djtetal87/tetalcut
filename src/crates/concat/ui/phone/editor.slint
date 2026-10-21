@@ -679,6 +679,12 @@ export component PhoneEditor inherits Rectangle {
                 current: root.sheet == "transitions";
                 clicked => { root.show("transitions", false); }
             }
+            // TetalCut: one more lane at the top, as the desk's tray adds.
+            ToolItem {
+                glyph: Glyph.plus;
+                label: I18n.t("tray.addTrack");
+                clicked => { Editor.add-track(false); }
+            }
             // TetalCut: the sound bank
             ToolItem {
                 glyph: Glyph.music;
@@ -781,6 +787,18 @@ export component PhoneEditor inherits Rectangle {
                 current: root.sheet == "clip-audio";
                 clicked => { root.show("clip-audio", true); }
             }
+            // TetalCut: the sound off its picture, and back on it - joined
+            // again, or restored after it was deleted.
+            if root.is-video && Editor.sound-detachable: ToolItem {
+                glyph: Glyph.waveform;
+                label: I18n.t("studio.detachAudio");
+                clicked => { Editor.shortcut("detach"); }
+            }
+            if (root.is-video || root.is-audio) && Editor.sound-reattachable: ToolItem {
+                glyph: Glyph.merge;
+                label: I18n.t("phone.restoreAudio");
+                clicked => { Editor.shortcut("reattach"); }
+            }
             if root.is-picture: ToolItem {
                 glyph: Glyph.sun;
                 label: I18n.t("common.adjust");
@@ -792,6 +810,14 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("common.effects");
                 current: root.sheet == "clip-effects";
                 clicked => { root.show("clip-effects", true); }
+            }
+            // TetalCut: a filter on this clip alone, on its chain like an
+            // effect, with no lane of its own.
+            if root.is-picture: ToolItem {
+                glyph: Glyph.filter;
+                label: I18n.t("mediaPane.filters");
+                current: root.sheet == "filters";
+                clicked => { root.show("filters", true); }
             }
             if root.is-picture: ToolItem {
                 glyph: Glyph.transition;
@@ -1006,6 +1032,8 @@ export component PhoneEditor inherits Rectangle {
             padding: 12px;
             spacing: 8px;
 
+            // TetalCut: opened from a clip, the filter goes on that clip.
+            if root.sheet-needs-clip: SheetNote { text: I18n.t("phone.filterOnClip"); }
             ShelfSearch {
                 shelf: 0;
                 placeholder: I18n.t1("common.searchKind", I18n.t("mediaPane.filter"));
@@ -1019,7 +1047,11 @@ export component PhoneEditor inherits Rectangle {
                 entries: Editor.catalogue-filters;
                 auditions: false;
                 applied(id, label) => {
-                    Editor.library-apply-filter(id, label);
+                    if (root.sheet-needs-clip) {
+                        Editor.library-apply-effect(id);
+                    } else {
+                        Editor.library-apply-filter(id, label);
+                    }
                     root.hide();
                 }
             }

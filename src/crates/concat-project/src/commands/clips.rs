@@ -196,8 +196,7 @@ pub(super) fn apply(
             let track_id = match track_id {
                 Some(id) if timeline.track(&id).is_some() => id,
                 Some(_) => return Err(CommandError::TrackGone),
-                None => first_free_track(timeline, start, duration)
-                    .unwrap_or_else(|| fresh_track(timeline, mint)),
+                None => layer_track(timeline, mint, start, duration),
             };
             let start = timeline.nearest_free_start(&track_id, start, duration, &[]);
             let id = mint.next("c");
@@ -825,6 +824,49 @@ fn first_free_track(timeline: &Timeline, start: f64, duration: f64) -> Option<St
         .iter()
         .find(|track| timeline.is_free(&track.id, start, duration, &[]))
         .map(|track| track.id.clone())
+}
+
+/// TetalCut: where a filter laid over the cut goes when no lane is named:
+/// the lane just above the highest picture over its span, so it tints the
+/// footage and nothing it should not. A filter filters the stack beneath
+/// its lane, so one walked up from the bottom, as a picture is placed,
+/// could land under the video and do nothing - and one at the very top
+/// would tint the captions too. When that lane is taken, a new one is
+/// put in there, between the picture and what sits over it: an edit
+/// with every lane busy still takes a filter.
+fn layer_track(timeline: &mut Timeline, mint: &mut IdMint, start: f64, duration: f64) -> String {
+    let end = start + duration;
+    let floor = timeline
+        .tracks
+        .iter()
+        .enumerate()
+        .filter(|(_, track)| {
+            timeline.clips.iter().any(|clip| {
+                clip.track_id == track.id
+                    && matches!(clip.kind, ClipKind::Video | ClipKind::Image)
+                    && clip.start < end
+                    && start < clip.start + clip.duration
+            })
+        })
+        .map(|(row, _)| row + 1)
+        .max()
+        .unwrap_or(0);
+    if let Some(track) = timeline.tracks.get(floor)
+        && timeline.is_free(&track.id, start, duration, &[])
+    {
+        return track.id.clone();
+    }
+    let id = mint.next("t");
+    timeline.tracks.insert(
+        floor.min(timeline.tracks.len()),
+        Track {
+            id: id.clone(),
+            visible: true,
+            muted: false,
+            extra: Default::default(),
+        },
+    );
+    id
 }
 
 /// A new, empty lane at the top, for a clip with nowhere else to go.

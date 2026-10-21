@@ -310,6 +310,8 @@
   "phone.addATitle": "टाइटल जोड़ें",
   "phone.back": "वापस",
   "phone.captions": "कैप्शन",
+  "phone.filterOnClip": "फ़िल्टर केवल चुनी गई क्लिप पर लगेगा।",
+  "phone.restoreAudio": "ऑडियो वापस लाएँ",
   "phone.duplicate": "डुप्लिकेट",
   "phone.edit": "संपादन",
   "phone.emptyLanes": "वीडियो लाने के लिए नीचे मीडिया पर टैप करें; वह यहां आएगा।",

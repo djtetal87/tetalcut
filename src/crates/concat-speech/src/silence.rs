@@ -46,6 +46,11 @@ const FRAME: f64 = 0.02;
 /// A recording whose loud frames are less than this many dB above its
 /// quiet ones has no pauses to find: music, wind, a voice-over over a bed.
 const LEAST_RANGE_DB: f64 = 10.0;
+/// A pause is at least this many dB under the voice (the loud quarter of
+/// the take), however low the take's floor goes.
+const VOICE_TO_PAUSE_DB: f64 = 24.0;
+/// A sound this short, seconds, inside a pause is part of the pause.
+const BLIP: f64 = 0.1;
 
 /// The clip's sound from `start` for `window` seconds of its file, as the
 /// pauses are measured in.
@@ -90,13 +95,39 @@ pub fn keep(samples: &[f32], rate: u32, pauses: Pauses) -> Vec<(f64, f64)> {
     if peak - floor < LEAST_RANGE_DB {
         return whole;
     }
-    let threshold = floor + (peak - floor) * 0.3;
+    // Between the floor and the peak - and never far under the voice
+    // itself: a take with a stretch of near digital silence somewhere put
+    // the floor so low that a street's hum in the pauses counted as voice.
+    let voice = at(0.75);
+    let threshold = (floor + (peak - floor) * 0.3).max(voice - VOICE_TO_PAUSE_DB);
+
+    // Quiet frames, with the blips in a pause - a car, a click, a breath
+    // shorter than a syllable - counted as the pause they are in.
+    let mut quiet_at: Vec<bool> = levels.iter().map(|level| *level < threshold).collect();
+    let blip = (BLIP / FRAME).round() as usize;
+    let mut index = 0;
+    while index < quiet_at.len() {
+        if quiet_at[index] {
+            index += 1;
+            continue;
+        }
+        let begun = index;
+        while index < quiet_at.len() && !quiet_at[index] {
+            index += 1;
+        }
+        let bounded = begun > 0 && index < quiet_at.len();
+        if bounded && index - begun <= blip {
+            for frame in &mut quiet_at[begun..index] {
+                *frame = true;
+            }
+        }
+    }
 
     // Quiet runs, as frame ranges.
     let mut quiet: Vec<(usize, usize)> = Vec::new();
     let mut from = None;
-    for (index, level) in levels.iter().enumerate() {
-        match (from, *level < threshold) {
+    for (index, quiet_here) in quiet_at.iter().enumerate() {
+        match (from, *quiet_here) {
             (None, true) => from = Some(index),
             (Some(begun), false) => {
                 quiet.push((begun, index));
@@ -190,6 +221,26 @@ mod tests {
         assert!((kept[1].1 - 5.12).abs() < 0.05, "{kept:?}");
         assert!((kept[2].0 - 5.32).abs() < 0.05, "{kept:?}");
         assert!((kept[2].1 - 7.6).abs() < 0.05, "{kept:?}");
+    }
+
+    /// A street take: a hum in the pauses well under the voice, a car
+    /// passing in one of them, and a moment of near silence that drags the
+    /// floor down - the pauses are still found.
+    #[test]
+    fn pauses_over_a_street_hum_are_found() {
+        let mut samples = take(&[(true, 2.0), (false, 1.0), (true, 2.0), (false, 1.0), (true, 2.0)]);
+        // hum at about -45 dB everywhere, a blip in the first pause
+        for (index, sample) in samples.iter_mut().enumerate() {
+            *sample += (index as f32 * 0.31).sin() * 0.008;
+        }
+        let blip = (2.5 * f64::from(RATE)) as usize;
+        for sample in &mut samples[blip..blip + 800] {
+            *sample += 0.3;
+        }
+        // half a second of digital silence at the very end
+        samples.extend(std::iter::repeat_n(0.0, RATE as usize / 2));
+        let kept = keep(&samples, RATE, Pauses::default());
+        assert_eq!(kept.len(), 3, "{kept:?}");
     }
 
     #[test]

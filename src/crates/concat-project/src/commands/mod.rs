@@ -361,6 +361,21 @@ pub enum Command {
         /// language, which the document cannot know.
         name: String,
     },
+    /// TetalCut: the automatic edit. Keeps only `spans` of a clip - seconds
+    /// from its start on the timeline, the spoken parts - laid end to end
+    /// where it starts, with the same cut through the sound detached from
+    /// it, and the lanes they sit on closed up behind them. Each new cut
+    /// gets `transition` when there is room for it. One undo step.
+    KeepSpans {
+        /// The clip to cut: a picture, or a sound detached from one.
+        clip_id: String,
+        /// `[from, to]` seconds from the clip's start, to keep.
+        spans: Vec<[f64; 2]>,
+        /// What each new cut gets, when the pieces either side are long
+        /// enough for it.
+        #[serde(default)]
+        transition: Option<Transition>,
+    },
     /// Places a layer: a look or an effect over a span of the timeline that
     /// treats everything beneath it. No media; the chain starts as the one
     /// package named, at its defaults, and the clip's opacity is how hard it
@@ -1115,6 +1130,7 @@ pub fn apply(
         | Command::AddKeyedTextClip { .. }
         | Command::AddShapeClip { .. }
         | Command::AddLayerClip { .. }
+        | Command::KeepSpans { .. }
         | Command::MoveClips { .. }
         | Command::TrimClip { .. }
         | Command::SplitClips { .. }

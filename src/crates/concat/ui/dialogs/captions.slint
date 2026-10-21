@@ -49,6 +49,9 @@ export struct CaptionsSheetData {
     /// TetalCut: the movements while on screen, and the chosen one's row.
     motions: [string],
     motion: int,
+    /// TetalCut: the automatic edit - the pauses out and a dissolve on
+    /// each cut, before the captions.
+    auto-edit: bool,
     running: bool,
     /// 0..1: where the transcription surely is.
     progress: float,
@@ -81,6 +84,7 @@ export component CaptionsDialog inherits Modal {
     callback style-changed(index: int);
     callback template-changed(index: int);
     callback uppercase-toggled(on: bool);
+    callback auto-edit-toggled(on: bool);
     callback motion-changed(index: int);
     callback begin();
     callback cancel();
@@ -247,6 +251,17 @@ export component CaptionsDialog inherits Modal {
                     options: root.data.motions;
                     current: root.data.motion;
                     changed(index) => { root.motion-changed(index); }
+                }
+            }
+
+            if root.from-voice: DialogRow {
+                label: I18n.t("captions.autoEdit");
+                HorizontalLayout {
+                    alignment: start;
+                    Switch {
+                        checked: root.data.auto-edit;
+                        toggled(on) => { root.auto-edit-toggled(on); }
+                    }
                 }
             }
 

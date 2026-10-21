@@ -532,5 +532,7 @@ export global Editor {
     /// A keyboard chord that names an edit rather than a view change. One
     /// callback with a verb rather than one per key, so the window's key
     /// table and the state's answer to it stay in one place each.
+    /// TetalCut: the automatic edit, as the captions sheet runs it.
+    callback auto-edit();
     callback shortcut(action: string);
 }

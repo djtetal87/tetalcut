@@ -696,6 +696,12 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("phone.captions");
                 clicked => { Editor.captions(); }
             }
+            // TetalCut: pauses out, a dissolve on each cut, captions on.
+            ToolItem {
+                glyph: Glyph.sparkle;
+                label: I18n.t("phone.autoEdit");
+                clicked => { Editor.auto-edit(); }
+            }
             ToolItem {
                 glyph: Glyph.volume;
                 label: I18n.t("phone.speak");
@@ -786,6 +792,11 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("common.audio");
                 current: root.sheet == "clip-audio";
                 clicked => { root.show("clip-audio", true); }
+            }
+            if root.is-video || root.is-audio: ToolItem {
+                glyph: Glyph.sparkle;
+                label: I18n.t("phone.autoEdit");
+                clicked => { Editor.auto-edit(); }
             }
             // TetalCut: the sound off its picture, and back on it - joined
             // again, or restored after it was deleted.

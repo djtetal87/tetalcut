@@ -18,6 +18,7 @@ use std::sync::Arc;
 use concat_project::{Command, motion};
 use concat_project::model::{ClipKey, KeyEase, KeyProperty, TextStyle};
 use concat_speech::JobStage;
+use concat_speech::silence;
 use concat_speech::transcribe::{Segment, Word};
 
 use crate::host::{on_ui_in_project, spawn_in_project};
@@ -69,12 +70,23 @@ pub enum CaptionsMsg {
     Progress(JobStage),
     /// The transcriber's worker is done: what was said, or why not.
     Finished(Result<Vec<Segment>, String>),
+    /// TetalCut: the Auto edit tool - the sheet on the selected clip's
+    /// voice, with the automatic edit switched on.
+    OpenAuto,
+    /// TetalCut: the "Remove pauses and add transitions" switch.
+    AutoToggled(bool),
+    /// TetalCut: an automatic edit's worker is done: what was said, and the
+    /// spans of the clip's window that are kept (seconds of its source from
+    /// its in-point), or why not.
+    AutoFinished(Result<(Vec<Segment>, Vec<(f64, f64)>), String>),
 }
 
 /// The clip a transcription is running over, as the finished segments
 /// need it: where it starts on the timeline and how fast it plays.
 #[derive(Clone, Debug)]
 struct Subject {
+    /// TetalCut: the clip, for the automatic edit to cut.
+    clip: String,
     start: f64,
     speed: f64,
     /// The look chosen when the run began.
@@ -126,6 +138,9 @@ pub struct CaptionsPane {
     pub uppercase: bool,
     /// TetalCut: row in [`concat_project::motion::LOOPS`]. Kept for the session.
     pub motion: usize,
+    /// TetalCut: the automatic edit - the pauses taken out of the clip and
+    /// a dissolve on each cut, then the captions on what is left.
+    pub auto: bool,
     pub running: bool,
     /// How far the running transcription looks.
     pub pace: Pace,
@@ -147,6 +162,31 @@ impl CaptionsPane {
                 self.open_on(studio, selected, false);
             }
             CaptionsMsg::OpenOnClip(id) => self.open_on(studio, Some(id), true),
+            CaptionsMsg::OpenAuto => {
+                let selected = studio.sole_selection();
+                self.open_on(studio, selected, true);
+                self.auto = true;
+            }
+            CaptionsMsg::AutoToggled(on) => self.auto = on,
+            CaptionsMsg::AutoFinished(result) => {
+                self.running = false;
+                let subject = self.subject.take();
+                if let (Ok(_), Some(subject)) = (&result, &subject) {
+                    self.timings
+                        .keep(&subject.model, self.pace.learned(subject.windows));
+                }
+                match result {
+                    Ok((segments, kept)) => {
+                        let Some(subject) = subject else {
+                            return;
+                        };
+                        self.open = false;
+                        self.finish_auto(studio, &subject, segments, &kept);
+                    }
+                    Err(error) if error.contains("cancel") => self.open = false,
+                    Err(error) => self.message = error,
+                }
+            }
             CaptionsMsg::Close => self.open = false,
             CaptionsMsg::VoiceToggled(on) => {
                 self.from_voice = on;
@@ -382,6 +422,7 @@ impl CaptionsPane {
             (Stage::Working, windows * per_window),
         ]);
         self.subject = Some(Subject {
+            clip: clip.id.clone(),
             start: clip.start,
             speed: clip.speed,
             look: self.look(),
@@ -395,6 +436,36 @@ impl CaptionsPane {
         self.running = true;
         self.message.clear();
         let epoch = crate::host::project_epoch();
+        if self.auto {
+            // TetalCut: what was said, then where the pauses are, read from
+            // the same window of the same file.
+            spawn_in_project(
+                move || {
+                    let segments = transcriber.transcribe(&dirs, &request, move |stage| {
+                        on_ui_in_project(epoch, move |studio, _, _| {
+                            studio.handle(Msg::Captions(CaptionsMsg::Progress(stage)));
+                        });
+                    })?;
+                    let samples = silence::read(
+                        &request.path,
+                        request.source_start,
+                        request.window,
+                        request.audio_stream,
+                    )?;
+                    let words: Vec<(f64, f64)> = segments
+                        .iter()
+                        .flat_map(timed_words)
+                        .map(|word| (word.start, word.end))
+                        .collect();
+                    let kept = silence::keep(&samples, silence::RATE, &words, silence::Pauses::default());
+                    Ok((segments, kept))
+                },
+                |studio, _, _, result| {
+                    studio.handle(Msg::Captions(CaptionsMsg::AutoFinished(result)))
+                },
+            );
+            return;
+        }
         spawn_in_project(
             move || {
                 transcriber.transcribe(&dirs, &request, move |stage| {
@@ -405,6 +476,59 @@ impl CaptionsPane {
             },
             |studio, _, _, result| studio.handle(Msg::Captions(CaptionsMsg::Finished(result))),
         );
+    }
+
+    /// TetalCut: the automatic edit landed as one undo step - the clip cut
+    /// down to `kept` with a dissolve on each cut, and the captions of what
+    /// was said moved up with it.
+    fn finish_auto(
+        &self,
+        studio: &mut Studio,
+        subject: &Subject,
+        segments: Vec<Segment>,
+        kept: &[(f64, f64)],
+    ) {
+        let speed = if subject.speed.is_finite() && subject.speed > 0.0 {
+            subject.speed
+        } else {
+            1.0
+        };
+        let whole = kept.len() == 1 && kept[0].0 <= 0.0;
+        let mut commands = Vec::new();
+        if !whole && !kept.is_empty() {
+            commands.push(Command::KeepSpans {
+                clip_id: subject.clip.clone(),
+                spans: kept.iter().map(|(a, b)| [a / speed, b / speed]).collect(),
+                transition: Some(concat_project::model::Transition {
+                    id: AUTO_TRANSITION.to_owned(),
+                    duration: AUTO_TRANSITION_SECONDS,
+                }),
+            });
+        }
+        let segments = if whole { segments } else { moved_segments(&segments, kept) };
+        let (base, accent) = template_styles(subject.template, studio.prefs.title_style.as_ref());
+        let captions = segment_captions(
+            &segments,
+            subject.start,
+            speed,
+            subject.look,
+            Finish {
+                style: subject.style,
+                uppercase: subject.uppercase,
+                motion: subject.motion,
+            },
+            base.as_ref(),
+            accent.as_ref(),
+        );
+        let count = captions.len();
+        let cuts = if whole { 0 } else { kept.len().saturating_sub(1) };
+        commands.extend(captions);
+        if commands.is_empty() {
+            studio.notify(&t("captions.nothingSaidClip"), true);
+            return;
+        }
+        studio.apply(Command::Batch { commands });
+        studio.notify(&tf("captions.autoEdited", &[&cuts, &count]), false);
     }
 
     /// The sheet as Slint shows it.
@@ -450,6 +574,7 @@ impl CaptionsPane {
             ))
             .into(),
             motion: self.motion as i32,
+            auto_edit: self.auto,
             running: self.running,
             progress: self.pace.floor,
             ceiling: self.pace.ceiling,
@@ -714,6 +839,60 @@ fn timed_words(segment: &Segment) -> Vec<Word> {
         .collect()
 }
 
+/// TetalCut: the automatic edit's transition on every cut: the dissolve,
+/// as short as a transition goes, so the change of take does not show.
+const AUTO_TRANSITION: &str = "concat.dissolve";
+const AUTO_TRANSITION_SECONDS: f64 = 0.1;
+
+/// TetalCut: `segments` once only `kept` of their window is left: each word
+/// moved up with the cuts, a word in a cut dropped, a segment with no word
+/// left dropped too.
+fn moved_segments(segments: &[Segment], kept: &[(f64, f64)]) -> Vec<Segment> {
+    let place = |at: f64| -> Option<(f64, f64)> {
+        // The span the moment is in, as (where it lands, where that span ends).
+        let mut before = 0.0;
+        for (from, to) in kept {
+            if at >= *from && at <= *to {
+                return Some((before + at - from, before + to - from));
+            }
+            before += to - from;
+        }
+        None
+    };
+    segments
+        .iter()
+        .filter_map(|segment| {
+            let words: Vec<Word> = timed_words(segment)
+                .into_iter()
+                .filter_map(|word| {
+                    let (start, span_end) = place(word.start)?;
+                    let end = silence::moved(kept, word.end)
+                        .filter(|end| *end >= start)
+                        .unwrap_or(span_end)
+                        .min(span_end);
+                    Some(Word {
+                        start,
+                        end: end.max(start),
+                        text: word.text,
+                    })
+                })
+                .collect();
+            let first = words.first()?.start;
+            let last = words.last()?.end;
+            Some(Segment {
+                start: first,
+                end: last.max(first),
+                text: words
+                    .iter()
+                    .map(|word| word.text.trim())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                words,
+            })
+        })
+        .collect()
+}
+
 /// How long a phrase's pop takes, seconds.
 const PHRASE_POP: f64 = 0.18;
 /// How long a word's pop takes, seconds.
@@ -914,6 +1093,28 @@ mod tests {
 
     /// A clip in the voice list is its file and where it starts, in
     /// minutes and seconds, with hours once there are any.
+    #[test]
+    fn the_automatic_edit_moves_the_words_up_with_the_cuts() {
+        let word = |start: f64, end: f64, text: &str| Word {
+            start,
+            end,
+            text: text.to_owned(),
+        };
+        let segments = vec![Segment {
+            start: 1.0,
+            end: 5.0,
+            text: "hola a todos".to_owned(),
+            words: vec![word(1.0, 1.5, "hola"), word(1.6, 1.8, "a"), word(4.2, 5.0, "todos")],
+        }];
+        let moved = moved_segments(&segments, &[(0.9, 2.0), (4.0, 5.2)]);
+        assert_eq!(moved.len(), 1);
+        let words = &moved[0].words;
+        assert!((words[0].start - 0.1).abs() < 1e-9);
+        assert!((words[2].start - 1.3).abs() < 1e-9, "{words:?}");
+        assert!((moved[0].end - 2.1).abs() < 1e-9);
+        assert_eq!(moved[0].text, "hola a todos");
+    }
+
     #[test]
     fn a_voice_is_named_by_its_file_and_where_it_starts() {
         assert_eq!(source_label("Interview.mp4", 0.0), "Interview.mp4 · 0:00");

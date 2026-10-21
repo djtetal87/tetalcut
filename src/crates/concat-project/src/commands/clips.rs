@@ -324,6 +324,12 @@ pub(super) fn apply(
             })
         }
 
+        Command::KeepSpans {
+            clip_id,
+            spans,
+            transition,
+        } => keep_spans(project.active_mut(), mint, &clip_id, &spans, transition),
+
         Command::SplitClips { clip_ids, time } => {
             let timeline = project.active_mut();
             let mut created = None;
@@ -824,6 +830,132 @@ fn first_free_track(timeline: &Timeline, start: f64, duration: f64) -> Option<St
         .iter()
         .find(|track| timeline.is_free(&track.id, start, duration, &[]))
         .map(|track| track.id.clone())
+}
+
+/// TetalCut: [`Command::KeepSpans`].
+fn keep_spans(
+    timeline: &mut Timeline,
+    mint: &mut IdMint,
+    clip_id: &str,
+    spans: &[[f64; 2]],
+    transition: Option<Transition>,
+) -> Result<Outcome, CommandError> {
+    let Some(clip) = timeline.clip(clip_id).cloned() else {
+        return Ok(Outcome::default());
+    };
+    // A curve's clock is not affine, so the spans could not be found in
+    // its source; such a clip is left as it is.
+    if clip.speed_curve.is_some() {
+        return Ok(Outcome::default());
+    }
+    let whole = clip.duration;
+    // Tidy: inside the clip, in order, apart, and long enough to be clips.
+    let mut kept: Vec<(f64, f64)> = spans
+        .iter()
+        .map(|[a, b]| (a.max(0.0), b.min(whole)))
+        .filter(|(a, b)| a.is_finite() && b.is_finite() && b - a >= MIN_CLIP_DURATION)
+        .collect();
+    kept.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let mut merged: Vec<(f64, f64)> = Vec::new();
+    for (a, b) in kept {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    let total: f64 = merged.iter().map(|(a, b)| b - a).sum();
+    let removed = whole - total;
+    if merged.is_empty() || removed < MIN_CLIP_DURATION {
+        return Ok(Outcome::default());
+    }
+
+    // The picture and its detached sound, cut together when they line up.
+    let picture = match (&clip.kind, &clip.detached_from) {
+        (ClipKind::Audio, Some(video)) => video.clone(),
+        _ => clip.id.clone(),
+    };
+    let lined_up = |other: &Clip| {
+        (other.start - clip.start).abs() < 1e-3
+            && (other.duration - clip.duration).abs() < 1e-3
+            && (other.speed - clip.speed).abs() < 1e-9
+            && other.speed_curve.is_none()
+    };
+    let mut members: Vec<Clip> = timeline
+        .clips
+        .iter()
+        .filter(|other| {
+            other.id == clip.id
+                || ((other.id == picture || other.detached_from.as_deref() == Some(picture.as_str()))
+                    && lined_up(other))
+        })
+        .map(|other| Clip::clone(other))
+        .collect();
+    // The picture first, so its pieces' ids are there for the sound's.
+    members.sort_by_key(|member| member.kind != ClipKind::Video);
+
+    let end = clip.start + whole;
+    let lanes: Vec<String> = members.iter().map(|m| m.track_id.clone()).collect();
+    let mut picture_pieces: Vec<String> = Vec::new();
+    let mut pieces: Vec<Clip> = Vec::new();
+    for member in &members {
+        let mut at = member.start;
+        let count = merged.len();
+        for (index, (a, b)) in merged.iter().enumerate() {
+            let mut piece = member.clone();
+            if index > 0 {
+                piece.id = mint.next("c");
+            }
+            piece.start = at;
+            piece.duration = b - a;
+            piece.source_start = member.source_start + a * member.speed;
+            piece.rewindow_keys(whole, *a, *b);
+            if index > 0 {
+                piece.fade_in = 0.0;
+                piece.transition_in = None;
+                if member.kind.is_visual() {
+                    let shortest = (b - a).min(merged[index - 1].1 - merged[index - 1].0);
+                    piece.transition_in = transition
+                        .clone()
+                        .filter(|t| t.duration * 2.0 <= shortest);
+                }
+            }
+            if index + 1 < count {
+                piece.fade_out = 0.0;
+            }
+            if member.kind == ClipKind::Video && member.id == picture {
+                picture_pieces.push(piece.id.clone());
+            } else if member.detached_from.as_deref() == Some(picture.as_str()) {
+                if let Some(id) = picture_pieces.get(index) {
+                    piece.detached_from = Some(id.clone());
+                }
+            }
+            at += b - a;
+            pieces.push(piece);
+        }
+    }
+
+    // Out with the wholes, the lanes behind them closed up, in with the
+    // pieces where the first whole was.
+    let ids: Vec<String> = members.iter().map(|m| m.id.clone()).collect();
+    let place = timeline
+        .clips
+        .iter()
+        .position(|other| ids.contains(&other.id))
+        .unwrap_or(timeline.clips.len());
+    timeline.clips.retain(|other| !ids.contains(&other.id));
+    for other in timeline.clips.iter_mut() {
+        if lanes.contains(&other.track_id) && other.start >= end - 1e-6 {
+            Arc::make_mut(other).start -= removed;
+        }
+    }
+    let place = place.min(timeline.clips.len());
+    for (offset, piece) in pieces.into_iter().enumerate() {
+        timeline.clips.insert(place + offset, Arc::new(piece));
+    }
+    Ok(Outcome {
+        created_id: None,
+        applied: true,
+    })
 }
 
 /// TetalCut: where a filter laid over the cut goes when no lane is named:

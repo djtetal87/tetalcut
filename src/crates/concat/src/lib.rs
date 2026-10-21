@@ -1783,6 +1783,13 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_captions_uppercase_toggled(on_window!(|state, on: bool| {
         state.handle(Msg::Captions(CaptionsMsg::UppercaseToggled(on)));
     }));
+    app.on_captions_auto_edit_toggled(on_window!(|state, on: bool| {
+        state.handle(Msg::Captions(CaptionsMsg::AutoToggled(on)));
+    }));
+    // TetalCut: the phone's Auto edit tool.
+    editor.on_auto_edit(on_window!(|state| {
+        state.handle(Msg::Captions(CaptionsMsg::OpenAuto));
+    }));
     app.on_captions_motion_changed(on_window!(|state, index: i32| {
         state.handle(Msg::Captions(CaptionsMsg::MotionChanged(index)));
     }));

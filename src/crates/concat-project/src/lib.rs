@@ -2357,6 +2357,67 @@ mod tests {
         assert_eq!(editor.project().active().clips[0].speed, 0.0625);
     }
 
+    /// TetalCut: the automatic edit keeps the spoken spans of a video and
+    /// of its detached sound, end to end, with a short dissolve on each
+    /// new cut, and closes up the lane behind them.
+    #[test]
+    fn keep_spans_cuts_the_picture_and_its_sound_together() {
+        let (mut editor, media_id, clip_id) = fixture();
+        let track = editor.project().active().tracks[0].id.clone();
+        // Something after it on its lane, to be closed up behind it.
+        let after = lane(&mut editor, &media_id, &track, &[10.0])[0].clone();
+        let sound_id = editor
+            .apply(Command::DetachAudio {
+                clip_id: clip_id.clone(),
+            })
+            .expect("detaches")
+            .created_id
+            .expect("sound clip");
+        editor
+            .apply(Command::KeepSpans {
+                clip_id: clip_id.clone(),
+                spans: vec![[1.0, 3.0], [4.0, 8.0]],
+                transition: Some(crate::model::Transition {
+                    id: "concat.dissolve".to_owned(),
+                    duration: 0.1,
+                }),
+            })
+            .expect("cuts");
+        let timeline = editor.project().active();
+        let mut pictures: Vec<&crate::model::Clip> = timeline
+            .clips
+            .iter()
+            .filter(|c| c.kind == ClipKind::Video && c.id != after)
+            .map(|c| c.as_ref())
+            .collect();
+        pictures.sort_by(|a, b| a.start.total_cmp(&b.start));
+        assert_eq!(pictures.len(), 2);
+        assert_eq!((pictures[0].start, pictures[0].duration, pictures[0].source_start), (0.0, 2.0, 1.0));
+        assert_eq!((pictures[1].start, pictures[1].duration, pictures[1].source_start), (2.0, 4.0, 4.0));
+        assert!(pictures[0].transition_in.is_none());
+        assert_eq!(
+            pictures[1].transition_in.as_ref().map(|t| t.id.as_str()),
+            Some("concat.dissolve")
+        );
+        let sounds: Vec<&crate::model::Clip> = timeline
+            .clips
+            .iter()
+            .filter(|c| c.kind == ClipKind::Audio)
+            .map(|c| c.as_ref())
+            .collect();
+        assert_eq!(sounds.len(), 2, "the sound is cut the same way");
+        for sound in &sounds {
+            let picture = pictures
+                .iter()
+                .find(|p| Some(p.id.as_str()) == sound.detached_from.as_deref())
+                .expect("each piece of sound belongs to its piece of picture");
+            assert_eq!((sound.start, sound.duration), (picture.start, picture.duration));
+            assert!(sound.transition_in.is_none());
+        }
+        assert!(sounds.iter().any(|s| s.id == sound_id));
+        assert_eq!(timeline.clip(&after).expect("after").start, 6.0, "closed up by 4 s");
+    }
+
     /// TetalCut: a video whose detached sound was deleted gets its own
     /// sound back from Reattach, which has nothing left to merge.
     #[test]

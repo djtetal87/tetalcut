@@ -2657,7 +2657,14 @@ impl Studio {
         let Some(session) = self.session.as_ref() else {
             return;
         };
-        let specs = audio_specs(&session.flattened_clips());
+        // Through the transitions, so a dissolve's sound crosses the cut
+        // in the window as it will in the file.
+        let video = &self.timeline().video;
+        let specs = audio_specs(&concat_export::with_transitions(
+            &session.flattened_clips(),
+            video.rate_num,
+            video.rate_den,
+        ));
         self.host
             .playback
             .set_clips(std::path::PathBuf::from(session.path()), specs);
@@ -7790,11 +7797,17 @@ impl Studio {
         // Only the clips near the view: what the lanes show plus a screen
         // either side; see `TimelinePane::published_span`.
         let span = self.lanes.published_span();
+        // In time order, which is the order the lanes draw them in: a clip
+        // with a transition into it draws its seam controls over the clip
+        // before it. In the document's order a clip added earlier but
+        // placed later was drawn under its neighbour, which hid half the
+        // transition and its button.
+        let mut in_time: Vec<&Clip> = timeline.clips.iter().collect();
+        in_time.sort_by(|a, b| a.start.total_cmp(&b.start));
         sync(
             &models.clips,
-            timeline
-                .clips
-                .iter()
+            in_time
+                .into_iter()
                 .filter(|clip| {
                     crate::panes::timeline::TimelinePane::shows(
                         span,

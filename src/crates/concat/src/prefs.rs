@@ -66,6 +66,11 @@ pub struct Preferences {
     /// may not take (an HDR one opened NVENC first), and the person who
     /// wants one for smoother playback turns it on in Settings.
     pub proxies: bool,
+    /// TetalCut: proxies were switched on once for an iPhone. A phone
+    /// films in 4K, and a cut with a transition plays two of those files
+    /// at once; the light copies keep that smooth. Set the first time the
+    /// iPhone build runs, so turning proxies off afterwards sticks.
+    pub phone_proxies_set: bool,
     /// The magnetic timeline: a delete and a trim close the gap they would
     /// leave, on the lane they happen on. Off by default, because a gap is
     /// sometimes the point; ⇧⌫ ripples either way.
@@ -190,10 +195,23 @@ pub const DEFAULT_LISTEN: &str = "127.0.0.1:7420";
 impl Preferences {
     /// Reads the file, or the defaults when there is none.
     pub fn load(dirs: &AppDirs) -> Self {
-        std::fs::read(dirs.config.join(FILE))
+        let mut prefs: Self = std::fs::read(dirs.config.join(FILE))
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if cfg!(target_os = "ios") {
+            prefs.phone_defaults();
+        }
+        prefs
+    }
+
+    /// What an iPhone starts with: proxies on, once; see
+    /// [`Preferences::phone_proxies_set`].
+    fn phone_defaults(&mut self) {
+        if !self.phone_proxies_set {
+            self.proxies = true;
+            self.phone_proxies_set = true;
+        }
     }
 
     /// Writes the file. Best effort: a preference that did not stick is
@@ -211,6 +229,20 @@ mod tests {
     use super::*;
 
     const NAMES: [&str; 3] = ["Lime", "Sky", "Violet"];
+
+    /// An iPhone gets proxies on the first time, and keeps them off once
+    /// they were turned off after that.
+    #[test]
+    fn a_phone_turns_proxies_on_once() {
+        let mut prefs = Preferences::default();
+        prefs.phone_defaults();
+        assert!(prefs.proxies && prefs.phone_proxies_set);
+        prefs.proxies = false;
+        let mut again: Preferences =
+            serde_json::from_slice(&serde_json::to_vec(&prefs).unwrap()).unwrap();
+        again.phone_defaults();
+        assert!(!again.proxies, "a choice made after the first run sticks");
+    }
 
     /// Nothing remembered is the first accent, which is the default.
     #[test]

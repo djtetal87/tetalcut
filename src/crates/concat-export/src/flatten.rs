@@ -133,6 +133,12 @@ pub fn flatten_timeline_in(
                 media_height: media.height,
                 media_duration: media.duration,
                 has_audio: Some(media.has_audio),
+                // A picture is known by its own id, and its detached sound
+                // by the picture's: see `ExportClip::link`.
+                link: match clip.kind {
+                    ModelClipKind::Video => Some(clip.id.clone()),
+                    _ => clip.detached_from.clone(),
+                },
                 cutout: clip.cutout.clone(),
                 mask_dir: match (&clip.cutout, project_dir) {
                     (Some(cutout), Some(dir)) => {

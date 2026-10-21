@@ -978,6 +978,95 @@ fn fades_and_wipes_reach_the_picture() {
     }
 }
 
+/// How far apart two colours are, channel by channel at most.
+fn distance(a: [u8; 3], b: [u8; 3]) -> u8 {
+    a.iter().zip(b).map(|(x, y)| x.abs_diff(y)).max().unwrap_or(0)
+}
+
+/// A colour on the way from `from` to `to`: off both by a visible margin.
+fn between(got: [u8; 3], from: [u8; 3], to: [u8; 3]) -> bool {
+    distance(got, from) > 30 && distance(got, to) > 30
+}
+
+/// TetalCut: the iPhone case. Two whole files cut together - no footage
+/// past either cut - with the shortest dissolve a person picks to hide a
+/// cut. The overlap then runs after the cut over the outgoing file's last
+/// frame, held; both the export and the monitor show the two pictures
+/// mixed partway through it, playing and paused, and whole either side.
+#[test]
+fn a_short_dissolve_between_whole_files_mixes_both_pictures() {
+    let scratch = Scratch::new("short-dissolve");
+    let (red_path, blue_path) = (
+        scratch.path().join("red.mp4"),
+        scratch.path().join("blue.mp4"),
+    );
+    let (red, blue) = ([220, 30, 30], [30, 30, 220]);
+    solid(&red_path, red);
+    solid(&blue_path, blue);
+
+    let mut studio = Studio::new(scratch.path(), "ShortDissolve", video(WIDTH, HEIGHT, 30, 1));
+    let red_media = studio.import(&red_path);
+    let blue_media = studio.import(&blue_path);
+    // The later file added first, the way an edit put together out of
+    // order has it: the list order must not matter.
+    let second = studio
+        .apply(Command::AddClipAtFirstFree {
+            media_id: blue_media,
+            start: 3.0,
+        })
+        .expect("the clip has an id");
+    studio.apply(Command::AddClipAtFirstFree {
+        media_id: red_media,
+        start: 0.0,
+    });
+    studio.apply(Command::UpdateClip {
+        clip_id: second,
+        patch: ClipPatch {
+            transition_in: Some(Some(Transition {
+                id: "concat.dissolve".to_owned(),
+                duration: 0.2,
+            })),
+            ..ClipPatch::default()
+        },
+    });
+
+    let exported = studio.export("short dissolve");
+    exported.expect_colours(2.5, &[((0.5, 0.5), red)]);
+    let middle = exported.colour_at_point(3.1, 0.5, 0.5);
+    assert!(between(middle, red, blue), "the export mixes at 3.1 s: {middle:?}");
+    exported.expect_colours(3.5, &[((0.5, 0.5), blue)]);
+
+    let monitor = concat_host::preview::Monitor::new();
+    let settings = studio.session.settings();
+    let clips = std::sync::Arc::new(studio.session.flattened_clips());
+    for moving in [false, true] {
+        let at = |time: f64| {
+            let spec = concat_host::preview::FrameSpec {
+                time,
+                width: WIDTH,
+                height: HEIGHT,
+                moving,
+                proxy: moving,
+                color_space: concat_project::model::ColorSpace::Sdr,
+            };
+            let bytes = monitor
+                .frame(std::sync::Arc::clone(&clips), &settings, spec)
+                .unwrap_or_else(|error| panic!("the monitor draws {time} s: {error}"));
+            let index = ((HEIGHT / 2 * WIDTH + WIDTH / 2) * 4) as usize;
+            [bytes[index], bytes[index + 1], bytes[index + 2]]
+        };
+        let before = at(2.9);
+        assert!(distance(before, red) <= 30, "moving {moving}: red before the cut: {before:?}");
+        let mixed = at(3.1);
+        assert!(
+            between(mixed, red, blue),
+            "moving {moving}: the monitor mixes at 3.1 s: {mixed:?}"
+        );
+        let after = at(3.4);
+        assert!(distance(after, blue) <= 30, "moving {moving}: blue after it: {after:?}");
+    }
+}
+
 /// An iPhone's HDR - ten-bit HEVC tagged HLG - exports through the new road:
 /// decoded deep in its own signal, converted and conformed to the SDR
 /// timeline on the GPU as it uploads. The picture is the grey it was

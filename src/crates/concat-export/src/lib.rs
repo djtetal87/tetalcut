@@ -226,6 +226,12 @@ pub struct ExportClip {
     /// it back through `reveal_order()`.
     #[serde(skip)]
     pub reveal_map: Option<Arc<RevealMap>>,
+    /// What ties a picture to its detached sound: a video clip's own id,
+    /// and on a detached audio clip the id of the video it came from. A
+    /// transition on the picture's cut crossfades the sound that shares
+    /// it, so the sound does not jump where the picture dissolves.
+    #[serde(default)]
+    pub link: Option<String>,
 }
 
 impl ExportClip {
@@ -277,6 +283,7 @@ impl ExportClip {
             mask_dir: String::new(),
             highlighted: false,
             reveal_map: None,
+            link: None,
         }
     }
 }
@@ -547,6 +554,16 @@ pub(crate) fn transitions_at(shapes: &[TransitionShape], frame: i64) -> Vec<Tran
 /// `combine_transition`. Legacy ids are matched first and never reach this
 /// path, so a project saved before packaged transitions existed renders
 /// exactly as it always did.
+/// `clips` with their transitions resolved, for the window's playback:
+/// the sound it plays then crosses each cut the way the export's does.
+/// The picture's half of a transition is the preview plan's business.
+pub fn with_transitions(clips: &[ExportClip], rate_num: i64, rate_den: i64) -> Vec<ExportClip> {
+    let rate = FrameRate::checked(rate_num, rate_den).unwrap_or(FrameRate::THIRTY);
+    let mut resolved = clips.to_vec();
+    resolve_transitions(&mut resolved, rate);
+    resolved
+}
+
 fn resolve_transitions(clips: &mut Vec<ExportClip>, rate: FrameRate) -> Vec<TransitionSpan> {
     resolve_transitions_at(clips, rate, 0.0)
 }
@@ -823,11 +840,62 @@ fn overlap(clips: &mut Vec<ExportClip>, cut: &Cut, frame: f64) -> Option<Overlap
         let hold = last_frame_held(&clips[cut.outgoing], a_end, tail, frame);
         clips.push(hold);
     }
+    let (into, out_of) = (clips[cut.incoming].link.clone(), clips[cut.outgoing].link.clone());
+    crossfade_sound(clips, out_of.as_deref(), into.as_deref(), a_end, length, frame);
     Some(Overlap {
         incoming: cut.incoming,
         length,
         outgoing_runs,
     })
+}
+
+/// The longest a sound is faded at a cut it has no footage to cross over:
+/// enough to take the click off a hard cut, short enough not to be heard
+/// as a dip in a voice.
+const DECLICK: f64 = 0.03;
+
+/// Crossfades the detached sounds of a transition's two pictures across
+/// the cut at `cut`, the way the picture's own sound already is: the
+/// outgoing sound runs on past the cut and fades out, the incoming one
+/// starts before it and fades in, each as far as its file has footage.
+/// A side with no footage to give fades within itself instead, over a few
+/// hundredths at most - a clean cut in the sound rather than a click.
+///
+/// Only a sound that meets the cut is touched: one trimmed apart from its
+/// picture, or moved, is the user's own edit and keeps its own fades.
+fn crossfade_sound(
+    clips: &mut [ExportClip],
+    out_of: Option<&str>,
+    into: Option<&str>,
+    cut: f64,
+    length: f64,
+    frame: f64,
+) {
+    let half = length / 2.0;
+    let near = |a: f64, b: f64| (a - b).abs() < frame / 2.0;
+    for clip in clips.iter_mut() {
+        if clip.kind != ClipKind::Audio || clip.link.is_none() {
+            continue;
+        }
+        let link = clip.link.as_deref();
+        if link == out_of && near(clip.start + clip.duration, cut) {
+            let tail = half.min(tail_handle(clip, frame));
+            if tail >= frame / 2.0 {
+                extend(clip, 0.0, tail);
+                clip.fade_out = clip.fade_out.max(tail * 2.0);
+            } else {
+                clip.fade_out = clip.fade_out.max(DECLICK.min(half).min(clip.duration));
+            }
+        } else if link == into && near(clip.start, cut) {
+            let head = half.min(head_handle(clip));
+            if head >= frame / 2.0 {
+                extend(clip, head, 0.0);
+                clip.fade_in = clip.fade_in.max(head * 2.0);
+            } else {
+                clip.fade_in = clip.fade_in.max(DECLICK.min(half).min(clip.duration));
+            }
+        }
+    }
 }
 
 /// Footage before `clip`'s in-point, in timeline seconds. A clip whose
@@ -2938,6 +3006,87 @@ mod tests {
         ];
         clips[0].media_duration = Some(10.0);
         clips
+    }
+
+    /// [`cut_with_handles`] as an iPhone edit has it: each picture's sound
+    /// detached onto a lane of its own, linked back to its picture.
+    fn cut_with_detached_sound() -> Vec<ExportClip> {
+        let mut clips = cut_with_handles();
+        clips[0].link = Some("a".to_owned());
+        clips[1].link = Some("b".to_owned());
+        for picture in [0, 1] {
+            let mut sound = clips[picture].clone();
+            sound.kind = ClipKind::Audio;
+            sound.track = 1;
+            sound.transition = None;
+            clips[picture].muted = true;
+            clips.push(sound);
+        }
+        clips
+    }
+
+    /// A short dissolve crossfades the detached sounds too, over the same
+    /// overlap as the pictures: each runs into the other's side as far as
+    /// its file allows and fades across it, rather than cutting in one
+    /// sample while the picture dissolves.
+    #[test]
+    fn a_short_dissolve_crossfades_the_detached_sound() {
+        let mut clips = cut_with_detached_sound();
+        clips[1].transition = spec("concat.dissolve", 0.2);
+        let spans = resolve_transitions(&mut clips, FrameRate::THIRTY);
+        assert_eq!(spans.len(), 1, "the picture still dissolves");
+
+        let out = clips.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("a")).unwrap();
+        assert!((out.duration - 4.1).abs() < 1e-9, "runs on half the overlap");
+        assert!((out.fade_out - 0.2).abs() < 1e-9, "and fades out across it");
+        let into = clips.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("b")).unwrap();
+        assert!((into.start - 3.9).abs() < 1e-9, "starts half the overlap early");
+        assert!((into.source_start - 1.9).abs() < 1e-9, "with its clock moved");
+        assert!((into.fade_in - 0.2).abs() < 1e-9);
+    }
+
+    /// Two whole iPhone files cut together have no footage to cross over:
+    /// each sound keeps its place and loses only the click, a few
+    /// hundredths of fade - never a dip as long as the transition.
+    #[test]
+    fn whole_files_get_a_declick_not_a_dip() {
+        let mut clips = cut_with_detached_sound();
+        for clip in clips.iter_mut() {
+            clip.source_start = 0.0;
+            clip.media_duration = Some(4.0);
+        }
+        clips[1].transition = spec("concat.dissolve", 0.5);
+        resolve_transitions(&mut clips, FrameRate::THIRTY);
+
+        let out = clips.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("a")).unwrap();
+        assert_eq!((out.start, out.duration), (0.0, 4.0));
+        assert!((out.fade_out - DECLICK).abs() < 1e-9);
+        let into = clips.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("b")).unwrap();
+        assert_eq!((into.start, into.duration), (4.0, 4.0));
+        assert!((into.fade_in - DECLICK).abs() < 1e-9);
+    }
+
+    /// A sound moved off its picture's cut is the user's own edit, and a
+    /// transition leaves it alone.
+    #[test]
+    fn a_sound_moved_off_the_cut_is_left_alone() {
+        let mut clips = cut_with_detached_sound();
+        clips[3].start = 4.5;
+        clips[1].transition = spec("concat.dissolve", 0.2);
+        resolve_transitions(&mut clips, FrameRate::THIRTY);
+        let into = clips.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("b")).unwrap();
+        assert_eq!((into.start, into.fade_in), (4.5, 0.0));
+    }
+
+    /// The window's playback resolves transitions before it plays, so the
+    /// crossfade is heard there as in the file.
+    #[test]
+    fn playback_clips_carry_the_crossfade() {
+        let mut clips = cut_with_detached_sound();
+        clips[1].transition = spec("concat.dissolve", 0.2);
+        let played = with_transitions(&clips, 30, 1);
+        let into = played.iter().find(|c| c.kind == ClipKind::Audio && c.link.as_deref() == Some("b")).unwrap();
+        assert!((into.fade_in - 0.2).abs() < 1e-9);
     }
 
     #[test]

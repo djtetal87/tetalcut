@@ -180,6 +180,7 @@ impl CaptionsPane {
                         let Some(subject) = subject else {
                             return;
                         };
+                        let segments = dictionary::correct(segments, &dictionary::load());
                         self.open = false;
                         self.finish_auto(studio, &subject, segments, &kept);
                     }
@@ -252,6 +253,7 @@ impl CaptionsPane {
                         let Some(subject) = subject else {
                             return;
                         };
+                        let segments = dictionary::correct(segments, &dictionary::load());
                         let (base, accent) =
                             template_styles(subject.template, studio.prefs.title_style.as_ref());
                         let commands = segment_captions(
@@ -398,6 +400,10 @@ impl CaptionsPane {
             source_start: clip.source_start,
             window: clip.duration * clip.speed,
             model_id: model.clone(),
+            // TetalCut: told the language rather than left to guess it, when
+            // the window is in Spanish; primed with the dictionary's words.
+            language: crate::i18n::current().starts_with("es").then(|| "es".to_owned()),
+            prompt: dictionary::prompt(&dictionary::load()),
         };
         let dirs = studio.host.dirs.clone();
         let transcriber = Arc::clone(&studio.host.transcriber);
@@ -795,16 +801,26 @@ fn styled_captions(
             words.extend(phrase);
         }
         let big = (look.0, look.1 * WORD_SIZE);
+        // TetalCut: one word on screen at a time. Each ends where the next
+        // begins, and none begins before the last has gone - two on screen
+        // at once land on two lanes, one over the other, and were then
+        // lined up by hand.
+        let mut floor = f64::NEG_INFINITY;
         for (index, word) in words.iter().enumerate() {
-            let begin = at(word.start);
+            let begin = at(word.start).max(floor);
             let next = words.get(index + 1).map(|next| at(next.start));
             let spoken_end = at(word.end) + WORD_LINGER;
-            let end = match next {
+            let mut end = match next {
                 // the next word takes over, unless a pause comes first
                 Some(next) if next - spoken_end < WORD_GAP => next,
                 _ => spoken_end,
-            };
-            let duration = (end - begin).max(WORD_MIN);
+            }
+            .max(begin + WORD_MIN);
+            if let Some(next) = next.filter(|next| *next >= begin + WORD_MIN) {
+                end = end.min(next);
+            }
+            floor = end;
+            let duration = end - begin;
             let keyed = accent.filter(|_| keys.get(index).copied().unwrap_or(false));
             let (look, style) = match keyed {
                 Some(accent) => ((big.0, big.1 * ACCENT_SIZE), Some(accent)),
@@ -814,13 +830,21 @@ fn styled_captions(
         }
         return out;
     }
-    for segment in segments {
+    // TetalCut: phrases one after another too, never two at once.
+    let mut floor = f64::NEG_INFINITY;
+    let spoken: Vec<&Segment> = segments.iter().filter(|s| !s.text.trim().is_empty()).collect();
+    for (index, segment) in spoken.iter().enumerate() {
         let text = segment.text.trim().to_owned();
-        if text.is_empty() {
-            continue;
+        let begin = at(segment.start).max(floor);
+        let mut duration = ((segment.end - segment.start) / speed).max(0.2);
+        if let Some(next) = spoken
+            .get(index + 1)
+            .map(|next| at(next.start))
+            .filter(|next| *next >= begin + 0.2)
+        {
+            duration = duration.min(next - begin);
         }
-        let begin = at(segment.start);
-        let duration = ((segment.end - segment.start) / speed).max(0.2);
+        floor = begin + duration;
         if style == 1 {
             out.push(keyed_caption(text, begin, duration, look, base, PHRASE_POP));
         } else {
@@ -853,6 +877,141 @@ fn timed_words(segment: &Segment) -> Vec<Word> {
             timed
         })
         .collect()
+}
+
+/// TetalCut: the person's own words for the transcriber - a text file in
+/// Documents, `TetalCut Diccionario.txt`, edited in Files or Finder. A line
+/// `wrong = right` replaces what whisper keeps writing wrong ("la fe = La
+/// Ferre"); a line with a word alone is just a word to expect. Every right
+/// word primes whisper too.
+mod dictionary {
+    use concat_speech::transcribe::{Segment, Word};
+
+    /// What a first look at the file finds in it.
+    const STARTER: &str = "# TetalCut: diccionario de subtítulos\n\
+# Una corrección por línea:   lo que escribe mal = cómo debe ir\n\
+# Una palabra sola es una palabra que el transcriptor debe esperar.\n\
+# Ejemplos (borra el # para usarlos):\n\
+# la fe = La Ferre\n\
+# mostasal = Mostazal\n\
+# Bsale\n";
+
+    /// The file, beside the sound bank and the templates.
+    fn path() -> Option<std::path::PathBuf> {
+        let home = std::env::var_os("HOME")?;
+        Some(
+            std::path::PathBuf::from(home)
+                .join("Documents")
+                .join("TetalCut Diccionario.txt"),
+        )
+    }
+
+    /// `(wrong, right)` pairs, and words alone as `(word, word)`. The file
+    /// is made, with examples, the first time it is looked for.
+    pub fn load() -> Vec<(String, String)> {
+        let Some(path) = path() else {
+            return Vec::new();
+        };
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(_) => {
+                if let Some(folder) = path.parent() {
+                    let _ = std::fs::create_dir_all(folder);
+                }
+                let _ = std::fs::write(&path, STARTER);
+                return Vec::new();
+            }
+        };
+        parse(&text)
+    }
+
+    pub fn parse(text: &str) -> Vec<(String, String)> {
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter_map(|line| match line.split_once('=') {
+                Some((wrong, right)) => {
+                    let (wrong, right) = (wrong.trim(), right.trim());
+                    (!wrong.is_empty() && !right.is_empty())
+                        .then(|| (wrong.to_owned(), right.to_owned()))
+                }
+                None => Some((line.to_owned(), line.to_owned())),
+            })
+            .collect()
+    }
+
+    /// The words whisper is primed with: every right-hand word.
+    pub fn prompt(rules: &[(String, String)]) -> Option<String> {
+        let mut words: Vec<&str> = rules.iter().map(|(_, right)| right.as_str()).collect();
+        words.dedup();
+        (!words.is_empty()).then(|| words.join(", "))
+    }
+
+    /// A word as compared: lower case, without the punctuation around it.
+    fn bare(word: &str) -> String {
+        word.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    }
+
+    /// `segments` with each wrong run of words replaced by the right one,
+    /// which takes the run's time and the last word's punctuation.
+    pub fn correct(segments: Vec<Segment>, rules: &[(String, String)]) -> Vec<Segment> {
+        let rules: Vec<(Vec<String>, &str)> = rules
+            .iter()
+            .filter(|(wrong, right)| wrong != right)
+            .map(|(wrong, right)| (wrong.split_whitespace().map(bare).collect(), right.as_str()))
+            .filter(|(wrong, _): &(Vec<String>, &str)| !wrong.is_empty())
+            .collect();
+        if rules.is_empty() {
+            return segments;
+        }
+        segments
+            .into_iter()
+            .map(|mut segment| {
+                let words = if segment.words.is_empty() {
+                    super::timed_words(&segment)
+                } else {
+                    std::mem::take(&mut segment.words)
+                };
+                let mut out: Vec<Word> = Vec::with_capacity(words.len());
+                let mut index = 0;
+                'words: while index < words.len() {
+                    for (wrong, right) in &rules {
+                        let end = index + wrong.len();
+                        if end <= words.len()
+                            && words[index..end].iter().map(|w| bare(&w.text)).eq(wrong.iter().cloned())
+                        {
+                            let last = &words[end - 1].text;
+                            let tail: String = last
+                                .chars()
+                                .rev()
+                                .take_while(|c| !c.is_alphanumeric())
+                                .collect::<Vec<_>>()
+                                .into_iter()
+                                .rev()
+                                .collect();
+                            out.push(Word {
+                                start: words[index].start,
+                                end: words[end - 1].end,
+                                text: format!("{right}{tail}"),
+                            });
+                            index = end;
+                            continue 'words;
+                        }
+                    }
+                    out.push(words[index].clone());
+                    index += 1;
+                }
+                segment.text = out
+                    .iter()
+                    .map(|word| word.text.trim())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                segment.words = out;
+                segment
+            })
+            .collect()
+    }
 }
 
 /// TetalCut: the automatic edit's transition on every cut: the dissolve,
@@ -1114,6 +1273,62 @@ mod tests {
 
     /// A clip in the voice list is its file and where it starts, in
     /// minutes and seconds, with hours once there are any.
+    #[test]
+    fn the_dictionary_puts_the_right_words_in() {
+        let rules = dictionary::parse("# comment\nla fe = La Ferre\nmostasal = Mostazal\nBsale\n");
+        assert_eq!(dictionary::prompt(&rules).as_deref(), Some("La Ferre, Mostazal, Bsale"));
+        let word = |start: f64, end: f64, text: &str| Word {
+            start,
+            end,
+            text: text.to_owned(),
+        };
+        let segments = vec![Segment {
+            start: 0.0,
+            end: 3.0,
+            text: "Hoy en la fe, de Mostasal.".to_owned(),
+            words: vec![
+                word(0.0, 0.3, "Hoy"),
+                word(0.3, 0.5, "en"),
+                word(0.5, 0.7, "la"),
+                word(0.7, 1.0, "fe,"),
+                word(1.0, 1.2, "de"),
+                word(1.2, 2.0, "Mostasal."),
+            ],
+        }];
+        let fixed = dictionary::correct(segments, &rules);
+        assert_eq!(fixed[0].text, "Hoy en La Ferre, de Mostazal.");
+        assert_eq!((fixed[0].words[2].start, fixed[0].words[2].end), (0.5, 1.0));
+    }
+
+    #[test]
+    fn words_never_share_the_screen() {
+        let word = |start: f64, end: f64, text: &str| Word {
+            start,
+            end,
+            text: text.to_owned(),
+        };
+        // whisper's loose times: overlapping, and two at the same instant
+        let segments = vec![Segment {
+            start: 0.0,
+            end: 2.0,
+            text: "uno dos tres cuatro".to_owned(),
+            words: vec![word(0.0, 0.8, "uno"), word(0.3, 0.9, "dos"), word(0.3, 0.9, "tres"), word(1.5, 2.0, "cuatro")],
+        }];
+        let commands = styled_captions(&segments, 0.0, 1.0, (0.35, 0.05), 2, None, None);
+        let spans: Vec<(f64, f64)> = commands
+            .iter()
+            .map(|command| match command {
+                Command::AddKeyedTextClip { start, duration, .. } => (*start, start + duration.unwrap()),
+                Command::AddTextClip { start, duration, .. } => (*start, start + duration.unwrap()),
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(spans.len(), 4);
+        for pair in spans.windows(2) {
+            assert!(pair[1].0 >= pair[0].1 - 1e-9, "{spans:?}");
+        }
+    }
+
     #[test]
     fn the_automatic_edit_moves_the_words_up_with_the_cuts() {
         let word = |start: f64, end: f64, text: &str| Word {

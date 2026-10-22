@@ -48,7 +48,9 @@ struct KnownModel {
 ///
 /// All from the official `ggerganov/whisper.cpp` conversions. Nothing bigger
 /// than `small`: `medium` is 1.5 GB and minutes-per-minute on CPU, which is
-/// the opposite of what this feature is for.
+/// the opposite of what this feature is for - save TetalCut's one exception,
+/// large-v3-turbo quantised to five bits: large's ear for Spanish at a third
+/// of medium's size, its decoder cut to four layers.
 const KNOWN_MODELS: &[KnownModel] = &[
     KnownModel {
         id: "tiny.en",
@@ -93,9 +95,17 @@ const KNOWN_MODELS: &[KnownModel] = &[
     KnownModel {
         id: "small",
         label: "Small (Multilingual)",
-        blurb: "Best quality offered, any language.",
+        blurb: "Better wording, any language.",
         approx_bytes: 487_601_967,
         sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        english_only: false,
+    },
+    KnownModel {
+        id: "large-v3-turbo-q5_0",
+        label: "Large v3 Turbo (Multilingual)",
+        blurb: "Best quality offered: names, accents and punctuation. Slower.",
+        approx_bytes: 574_041_195,
+        sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
         english_only: false,
     },
 ];
@@ -212,6 +222,15 @@ pub struct TranscribeRequest {
     pub window: f64,
     /// Which model to use, e.g. "base.en".
     pub model_id: String,
+    /// TetalCut: the language spoken, as whisper names it ("es"), for a
+    /// multilingual model; `None` lets it guess from the first window,
+    /// which a small model gets wrong on a short clip.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// TetalCut: words to expect - names, brands - that whisper is primed
+    /// with, so it spells them as they are.
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 struct LoadedModel {
@@ -413,10 +432,13 @@ impl Transcriber {
         // over a vocabulary it was never trained on, and "hears" Thai at
         // one percent - so it is simply told English.
         params.set_language(Some(if context.is_multilingual() {
-            "auto"
+            request.language.as_deref().unwrap_or("auto")
         } else {
             "en"
         }));
+        if let Some(prompt) = request.prompt.as_deref().filter(|p| !p.trim().is_empty()) {
+            params.set_initial_prompt(&prompt.replace('\0', ""));
+        }
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
@@ -658,6 +680,8 @@ mod real_audio {
             source_start: 0.0,
             window: 30.0,
             model_id: "tiny.en".to_owned(),
+            language: None,
+            prompt: None,
         };
         let segments = transcriber
             .transcribe(&dirs, &request, |stage| eprintln!("{stage:?}"))

@@ -6347,6 +6347,13 @@ impl Studio {
                 cutout: Some(model::Cutout::erase()),
             });
         }
+        // The monitor has to be showing the clip for a stroke to land on
+        // it: a playhead off its ends goes to its first frame.
+        let (from, to) = (clip.start, clip.start + clip.duration);
+        let at = f64::from(self.playhead);
+        if at < from || at >= to {
+            self.seek((from + 0.01_f64.min(clip.duration / 2.0)) as f32);
+        }
         self.brush = 0;
         self.painting = true;
         self.pending_stroke = None;

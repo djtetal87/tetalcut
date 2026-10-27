@@ -204,6 +204,9 @@ export component ConfigPane inherits Rectangle {
     callback cutout-painting(on: bool);
     callback cutout-subject(index: int);
     callback cutout-clear();
+    callback erase-start();
+    callback erase-apply();
+    callback erase-cancel();
     /// The Enhance switch: start it, or show the copy or the original.
     callback clip-enhance-set(on: bool);
     callback transition-remove();
@@ -635,6 +638,9 @@ export component ConfigPane inherits Rectangle {
                         cutout-painting(on) => { root.cutout-painting(on); }
                         cutout-subject(index) => { root.cutout-subject(index); }
                         cutout-clear => { root.cutout-clear(); }
+                        erase-start => { root.erase-start(); }
+                        erase-apply => { root.erase-apply(); }
+                        erase-cancel => { root.erase-cancel(); }
                     }
 
                     if !root.is-image && !root.is-shape: SpeedPanel {

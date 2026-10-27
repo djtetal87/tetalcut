@@ -37,6 +37,10 @@ pub enum ModelId {
     /// Real-ESRGAN's compact general model: a picture four times its size
     /// with its noise and compression gone, what Enhance is made of.
     Enhance,
+    /// TetalCut: MI-GAN, a small inpainting network made for phones: a
+    /// picture with a hole in it, and the hole filled from around it.
+    /// What Erase object is made of.
+    Eraser,
 }
 
 /// One model as the table describes it.
@@ -60,7 +64,7 @@ pub struct ModelSpec {
 }
 
 /// Every downloadable model.
-pub const MODELS: [ModelSpec; 5] = [
+pub const MODELS: [ModelSpec; 6] = [
     ModelSpec {
         id: ModelId::Person,
         file: "rvm-mobilenetv3.onnx",
@@ -101,6 +105,14 @@ pub const MODELS: [ModelSpec; 5] = [
         sha256: "1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112",
         licence: "BSD-3-Clause",
     },
+    ModelSpec {
+        id: ModelId::Eraser,
+        file: "migan-512.onnx",
+        upstream: "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan.onnx",
+        bytes: 29_546_882,
+        sha256: "593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae",
+        licence: "MIT",
+    },
 ];
 
 impl ModelId {
@@ -120,6 +132,7 @@ impl ModelId {
             ModelId::BrushEncoder => "slimsam-77-encoder",
             ModelId::BrushDecoder => "slimsam-77-decoder",
             ModelId::Enhance => "realesr-general-x4v3",
+            ModelId::Eraser => "migan-512",
         }
     }
 }

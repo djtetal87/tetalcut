@@ -240,6 +240,64 @@ impl MaskStore {
         Some(mask)
     }
 
+    /// TetalCut: what Erase object takes out at `seconds`: the strokes
+    /// alone, painted over nothing - no model's mask under them - and the
+    /// smart strokes' regions where the brush model has followed their
+    /// thing to this instant. `None` when nothing is painted there.
+    /// `aspect` is the source's width over its height, for round brushes.
+    pub fn erase_mask(&self, seconds: f64, cutout: &Cutout, aspect: f32) -> Option<Arc<Mask>> {
+        if cutout.strokes.is_empty() {
+            return None;
+        }
+        let region_stores: Vec<(u64, MaskStore)> = cutout
+            .strokes
+            .iter()
+            .filter(|stroke| stroke.is_smart())
+            .map(|stroke| {
+                (
+                    strokes::stroke_key(stroke),
+                    MaskStore::open(&region_dir(&self.dir, stroke)),
+                )
+            })
+            .collect();
+        let millis = (seconds.max(0.0) * 1000.0).round() as u64;
+        // The instant on the analysis grid stands for the whole step, so
+        // the cache is keyed by it rather than by every frame's time.
+        let step = 1000 / u64::from(MASK_RATE);
+        let key = ResolvedKey {
+            file: self.dir.join(format!("erase-{}", millis / step)),
+            settings: settings_key(cutout, aspect, &region_stores, millis),
+        };
+        if let Some(hit) = resolved_cache()
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&key))
+        {
+            return (!hit.is_blank()).then_some(hit);
+        }
+        // Fine enough for a brush's edge, and the shape of the picture so
+        // a round brush stays round.
+        let aspect = if aspect.is_finite() && aspect > 0.0 {
+            aspect
+        } else {
+            1.0
+        };
+        let width = 512u32;
+        let height = ((width as f32 / aspect).round() as u32).clamp(16, 2048);
+        let blank = Mask::filled(width, height, 0);
+        let regions = move |stroke: &Stroke| {
+            region_stores
+                .iter()
+                .find(|(key, _)| *key == strokes::stroke_key(stroke))
+                .and_then(|(_, store)| store.mask_at(seconds))
+        };
+        let mask = Arc::new(strokes::paint(&blank, &cutout.strokes, aspect, &regions));
+        if let Ok(mut cache) = resolved_cache().lock() {
+            cache.put(key, Arc::clone(&mask));
+        }
+        (!mask.is_blank()).then_some(mask)
+    }
+
     /// The source instants between `from` and `to` seconds, on the analysis
     /// grid, that have no mask yet. Empty when the range is covered.
     pub fn missing(&self, from: f64, to: f64) -> Vec<u64> {
@@ -312,6 +370,7 @@ fn settings_key(
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     (cutout.mode == CutoutMode::Custom).hash(&mut hasher);
+    cutout.erase.hash(&mut hasher);
     cutout.feather.to_bits().hash(&mut hasher);
     aspect.to_bits().hash(&mut hasher);
     if cutout.mode == CutoutMode::Custom {
@@ -482,6 +541,7 @@ mod tests {
                 size: 0.5,
                 points: vec![[0.5, 0.5]],
             }],
+            erase: false,
         };
         assert_eq!(
             store.resolved(0.0, &custom, 1.0).map(|m| m.at(8, 8)),
@@ -515,11 +575,42 @@ mod tests {
                 size: 0.5,
                 points: vec![[0.5, 0.5]],
             }],
+            erase: false,
         };
         assert_eq!(
             store.resolved(0.0, &painted, 1.0).map(|m| m.at(8, 8)),
             Some(255)
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_erase_is_its_strokes_alone() {
+        let dir = scratch("erase");
+        // No model's masks at all: an erase needs none.
+        let store = MaskStore::open(&dir);
+        let mut erase = Cutout::erase();
+        assert!(store.erase_mask(0.0, &erase, 1.0).is_none());
+        erase.strokes.push(Stroke {
+            at: Some(0.0),
+            tool: BrushTool::Brush,
+            size: 0.1,
+            points: vec![[0.5, 0.5]],
+        });
+        let mask = store.erase_mask(1.0, &erase, 16.0 / 9.0).expect("painted");
+        assert!(mask.sample(0.5, 0.5) > 0.9);
+        assert!(mask.sample(0.1, 0.1) < 0.1);
+        // A smart stroke whose thing has not been read yet takes nothing.
+        let smart = Cutout {
+            strokes: vec![Stroke {
+                at: Some(0.0),
+                tool: BrushTool::SmartBrush,
+                size: 0.1,
+                points: vec![[0.5, 0.5]],
+            }],
+            ..Cutout::erase()
+        };
+        assert!(store.erase_mask(0.0, &smart, 1.0).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

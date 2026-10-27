@@ -974,6 +974,9 @@ pub struct Studio {
     enhance_jobs: HashMap<String, (bool, f32)>,
     /// Reverse writing a clip's backwards copy, by clip: how far along.
     reverse_jobs: HashMap<String, f32>,
+    /// TetalCut: Erase object writing a clip's copy, by clip id: whether
+    /// the network is downloading, and how far along.
+    erase_jobs: HashMap<String, (bool, f32)>,
     /// A selection being rendered into one clip, with its own cancel flag.
     merge_job: Option<MergeJob>,
     /// The smart stroke being read, by the same name, while one is.
@@ -2192,6 +2195,7 @@ impl Studio {
             cutout_jobs: HashMap::new(),
             enhance_jobs: HashMap::new(),
             reverse_jobs: HashMap::new(),
+            erase_jobs: HashMap::new(),
             merge_job: None,
             region_job: None,
             pending_stroke: None,
@@ -6320,6 +6324,225 @@ impl Studio {
         self.notify(&t("studio.enhancedClipNowShows"), false);
     }
 
+    // ── TetalCut: Erase object ──
+
+    /// Starts Erase object on the selected clip: its cutout becomes an
+    /// erase, empty or as it was, and the brushes come out with the smart
+    /// one picked, so a stroke names the thing to take away.
+    pub fn erase_start(&mut self) {
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        let Some(clip) = self.clip(&id).cloned() else {
+            return;
+        };
+        if !matches!(clip.kind, model::ClipKind::Video | model::ClipKind::Image)
+            || self.locked(&clip.track_id)
+        {
+            return;
+        }
+        if !clip.cutout.as_ref().is_some_and(|cutout| cutout.erase) {
+            self.apply(Command::SetClipCutout {
+                clip_id: id,
+                cutout: Some(model::Cutout::erase()),
+            });
+        }
+        self.brush = 0;
+        self.painting = true;
+        self.pending_stroke = None;
+        self.request_preview();
+    }
+
+    /// Puts Erase object away without erasing: the strokes go, and a run
+    /// under way stops.
+    pub fn erase_cancel(&mut self) {
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        if self.erase_jobs.contains_key(&id) {
+            self.host.erasers.cancel();
+        }
+        self.painting = false;
+        self.pending_stroke = None;
+        if self
+            .clip(&id)
+            .and_then(|clip| clip.cutout.as_ref())
+            .is_some_and(|cutout| cutout.erase)
+        {
+            self.apply(Command::SetClipCutout {
+                clip_id: id,
+                cutout: None,
+            });
+        }
+        self.request_preview();
+    }
+
+    /// Takes the painted thing out of the selected clip: writes the copy
+    /// of its span with the hole filled, then points the clip at it.
+    pub fn erase_apply(&mut self) {
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        if !self.erase_jobs.is_empty() || self.host.erasers.is_busy() {
+            self.notify(&t("studio.eraseBusy"), true);
+            return;
+        }
+        let Some(clip) = self.clip(&id).cloned() else {
+            return;
+        };
+        let Some(cutout) = clip.cutout.clone().filter(|cutout| cutout.erase) else {
+            return;
+        };
+        if cutout.strokes.is_empty() {
+            self.notify(&t("studio.erasePaintFirst"), true);
+            return;
+        }
+        let Some(media) = self.project().media_by_id(&clip.media_id).cloned() else {
+            return;
+        };
+        let Some(session) = self.session.as_ref() else {
+            return;
+        };
+        let project = std::path::PathBuf::from(session.path());
+        let still = media.kind == model::MediaKind::Image;
+        // The smart strokes' things have to have been followed along the
+        // clip first, or the frames past where the brush model has got to
+        // would keep them.
+        let start = clip.source_start;
+        let covered = clip.duration * clip.speed.max(0.0625);
+        let following = cutout.strokes.iter().any(|stroke| {
+            stroke.is_smart()
+                && RegionRequest {
+                    project: project.clone(),
+                    media_path: media.path.clone(),
+                    media_size: (media.width.unwrap_or(0), media.height.unwrap_or(0)),
+                    still,
+                    subject: cutout.subject,
+                    ranges: vec![(start, start + covered)],
+                    stroke: stroke.clone(),
+                }
+                .outstanding()
+        });
+        if following || self.region_job.is_some() {
+            self.ensure_regions();
+            self.notify(&t("studio.eraseStillFollowing"), true);
+            return;
+        }
+        let (width, height) = (media.width.unwrap_or(0), media.height.unwrap_or(0));
+        let aspect = if width > 0 && height > 0 {
+            width as f32 / height as f32
+        } else {
+            16.0 / 9.0
+        };
+        let Some(target) =
+            concat_host::erase::target_for(&project, &media.path, start, covered, &cutout, still)
+        else {
+            self.notify(&tf("studio.couldNotRead", &[&media.path]), true);
+            return;
+        };
+        let request = concat_host::EraseRequest {
+            project,
+            media_path: media.path.clone(),
+            still,
+            cutout,
+            aspect,
+            start,
+            duration: covered,
+            target,
+        };
+        let clip_id = clip.id.clone();
+        self.erase_jobs.insert(clip_id.clone(), (false, 0.0));
+        self.painting = false;
+        self.pending_stroke = None;
+        self.request_preview();
+        self.notify(&tf("studio.erasing", &[&media.name]), false);
+        let erasers = Arc::clone(&self.host.erasers);
+        let epoch = crate::host::project_epoch();
+        spawn_in_project(
+            move || {
+                let mut last = (false, -1.0f32);
+                let reporting = clip_id.clone();
+                let result = erasers.erase(&request, &mut |progress| {
+                    let now = match progress {
+                        concat_host::erase::Progress::Fetching { received, total } => {
+                            (true, received as f32 / total.max(1) as f32)
+                        }
+                        concat_host::erase::Progress::Analysing(fraction) => (false, fraction),
+                    };
+                    if now.0 != last.0 || now.1 - last.1 >= 0.01 {
+                        last = now;
+                        let id = reporting.clone();
+                        on_ui_in_project(epoch, move |studio, _, _| {
+                            if let Some(held) = studio.erase_jobs.get_mut(&id) {
+                                *held = now;
+                            }
+                        });
+                    }
+                });
+                (clip_id, start, covered, still, result)
+            },
+            |studio, _, _, (clip_id, start, covered, still, result)| {
+                studio.erase_jobs.remove(&clip_id);
+                match result {
+                    Ok(path) => studio.adopt_erased(&clip_id, &path, start, covered, still),
+                    Err(error) if error.contains("cancelled") => {}
+                    Err(error) => studio.notify(&tf("studio.erase", &[&error]), true),
+                }
+            },
+        );
+    }
+
+    /// Points clip `id` at the erased copy at `path` and drops the strokes
+    /// in the same step, so one undo brings both back - unless the clip
+    /// has moved on its file meanwhile.
+    fn adopt_erased(
+        &mut self,
+        id: &str,
+        path: &std::path::Path,
+        start: f64,
+        covered: f64,
+        still: bool,
+    ) {
+        let Some(clip) = self.clip(id).cloned() else {
+            return;
+        };
+        if !still
+            && ((clip.source_start - start).abs() > 1e-6
+                || (clip.duration * clip.speed.max(0.0625) - covered).abs() > 1e-6)
+        {
+            self.notify(&t("studio.clipChangedWhileBeing"), true);
+            return;
+        }
+        let summary = match media::probe(&path.to_string_lossy()) {
+            Ok(summary) => summary,
+            Err(error) => {
+                self.notify(&tf("studio.erase", &[&error]), true);
+                return;
+            }
+        };
+        let mut item = summary.to_new_media();
+        if let Some(original) = self.project().media.iter().find(|m| m.id == clip.media_id) {
+            item.name = format!("{} ({})", original.name, t("studio.erasedSuffix"));
+        }
+        item.origin = Some(model::MediaOrigin::Processed);
+        self.apply(Command::Batch {
+            commands: vec![
+                Command::ReplaceClipMedia {
+                    clip_id: id.to_owned(),
+                    item,
+                    source_start: (!still).then_some(0.0),
+                    enhanced: false,
+                },
+                Command::SetClipCutout {
+                    clip_id: id.to_owned(),
+                    cutout: None,
+                },
+            ],
+        });
+        self.request_preview();
+        self.notify(&t("studio.erased"), false);
+    }
+
     /// The Mode row: 0 off, 1 automatic, 2 custom. The chroma rows are the
     /// inspector's own business, on the chain.
     pub fn cutout_mode(&mut self, mode: i32) {
@@ -7277,8 +7500,10 @@ impl Studio {
         self.host.cutouts.cancel();
         self.host.enhancers.cancel();
         self.host.reversers.cancel();
+        self.host.erasers.cancel();
         self.enhance_jobs.clear();
         self.reverse_jobs.clear();
+        self.erase_jobs.clear();
         self.cancel_merge();
         self.cutout_jobs.clear();
         self.region_job = None;
@@ -9139,9 +9364,29 @@ impl Studio {
             text_height: text.max_height as f32,
             cutout: match &clip.cutout {
                 None => 0,
+                // TetalCut: an erase is not a background removal.
+                Some(cutout) if cutout.erase => 0,
                 Some(cutout) if cutout.mode == model::CutoutMode::Auto => 1,
                 Some(_) => 2,
             },
+            erase: clip.cutout.as_ref().is_some_and(|cutout| cutout.erase),
+            erase_strokes: clip
+                .cutout
+                .as_ref()
+                .filter(|cutout| cutout.erase)
+                .map(|cutout| cutout.strokes.len() as i32)
+                .unwrap_or(0),
+            erase_progress: self
+                .erase_jobs
+                .get(&clip.id)
+                .map(|(_, fraction)| *fraction)
+                .unwrap_or(-1.0),
+            erase_fetching: self
+                .erase_jobs
+                .get(&clip.id)
+                .is_some_and(|(fetching, _)| *fetching),
+            erase_following: clip.cutout.as_ref().is_some_and(|cutout| cutout.erase)
+                && self.region_job.is_some(),
             cutout_feather: clip
                 .cutout
                 .as_ref()

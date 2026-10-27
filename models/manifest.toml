@@ -84,6 +84,17 @@ sha256 = "1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112"
 licence = "BSD-3-Clause"
 upstream = "https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/c6a971706797c7502945a2b4c4274fce4900d4ab/realesr-general-x4v3.onnx"
 
+# TetalCut: Erase object's inpainting model, MI-GAN (Picsart), the 512
+# network that fills a hole in a picture from what is around it.
+[[model]]
+id = "erase-migan"
+family = "cutout"
+file = "migan-512.onnx"
+bytes = 29546882
+sha256 = "593eba0b7e04730f1b61c0a3cbca68d97d8d6a7ff5c6a44a7b9d7fcd880fc5ae"
+licence = "MIT"
+upstream = "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan.onnx"
+
 # ── Text to speech ───────────────────────────────────────────────────────
 # src/crates/concat-speech/src/tts.rs. Kokoro v1.0 multi-language, the
 # official sherpa-onnx conversions; the two differ only in quantisation.

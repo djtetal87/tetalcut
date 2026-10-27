@@ -734,5 +734,22 @@
   "sounds.deleteAgain": "Tap the trash again to delete it",
   "sounds.working": "Working on your sounds…",
   "sounds.fetchingPopular": "Downloading the Populares pack from Freesound…",
-  "sounds.popularNeedsKey": "To download Populares, paste your Freesound key in Buscar en Freesound."
+  "sounds.popularNeedsKey": "To download Populares, paste your Freesound key in Buscar en Freesound.",
+  "phone.eraseObject": "Apagar objeto",
+  "phone.eraseThing": "Objeto",
+  "phone.brushSmaller": "Mais fino",
+  "phone.brushBigger": "Mais grosso",
+  "phone.eraseApply": "Apagar",
+  "phone.eraseHint": "Pinte sobre o que quer apagar. \"Objeto\" pega a coisa inteira e a segue pelo clipe.",
+  "phone.eraseFollowing": "Seguindo o objeto ao longo do clipe…",
+  "phone.eraseReady": "Toque em \"Apagar\" para tirá-lo. Você pode continuar pintando para adicionar mais.",
+  "phone.eraseFetching": "Baixando o modelo… {0}%",
+  "phone.eraseWorking": "Apagando o objeto… {0}%",
+  "studio.eraseBusy": "Já há um objeto sendo apagado; espere terminar.",
+  "studio.erasePaintFirst": "Primeiro pinte sobre o que quer apagar.",
+  "studio.eraseStillFollowing": "O objeto ainda está sendo seguido no clipe; tente de novo em um instante.",
+  "studio.erasing": "Apagando o objeto de {0}…",
+  "studio.erase": "Apagar objeto: {0}",
+  "studio.erasedSuffix": "sem objeto",
+  "studio.erased": "Pronto: o clipe agora aparece sem o objeto. Desfazer o traz de volta."
 }

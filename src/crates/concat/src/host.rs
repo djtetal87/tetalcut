@@ -48,6 +48,8 @@ pub struct Host {
     pub brushes: Arc<concat_host::Brushes>,
     /// The restoration model, and the enhanced copies it writes.
     pub enhancers: Arc<concat_host::Enhancers>,
+    /// TetalCut: the inpainting network, and the erased copies it writes.
+    pub erasers: Arc<concat_host::Erasers>,
     pub reversers: Arc<concat_host::Reversers>,
     /// The Concat API on a socket, while the Automation page has it on. Its
     /// own sessions, apart from the window's: a caller edits projects of
@@ -72,6 +74,7 @@ impl Host {
             cutouts: Arc::new(concat_host::Cutouts::new(&dirs.data)),
             brushes: Arc::new(concat_host::Brushes::new(&dirs.data)),
             enhancers: Arc::new(concat_host::Enhancers::new(&dirs.data)),
+            erasers: Arc::new(concat_host::Erasers::new(&dirs.data)),
             reversers: Arc::new(concat_host::Reversers::new()),
             dirs,
             playback: Playback::start(Arc::new(Events))?,

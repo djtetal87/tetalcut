@@ -952,6 +952,10 @@ export component VideoPanel inherits VerticalLayout {
     /// What the automatic cutout keeps: 0 auto, 1 person, 2 object.
     callback cutout-subject(index: int);
     callback cutout-clear();
+    /// TetalCut: Erase object - start painting, take it out, put it away.
+    callback erase-start();
+    callback erase-apply();
+    callback erase-cancel();
 
     /// A shape is a figure, not footage: there is no background to take
     /// away and nothing to crop off its edges, so those sections stay out
@@ -1179,6 +1183,93 @@ export component VideoPanel inherits VerticalLayout {
                 label: I18n.t("clipInspector.flipVertical");
                 checked: root.selected.flip-v;
                 toggled(on) => { root.set(ClipField.flip-v, on ? 1 : 0); root.commit(); }
+            }
+        }
+    }
+
+    // TetalCut: Erase object. Paint over a thing on the monitor - the
+    // smart brush takes the whole of it and follows it along the clip -
+    // and Erase writes a copy with it taken out and the hole filled.
+    if !root.figure: Section {
+        erase := SectionHeader {
+            title: I18n.t("phone.eraseObject");
+            collapsible: true;
+            summary: root.selected.erase-progress >= 0
+                ? I18n.t1("phone.eraseWorking", "\{Math.round(root.selected.erase-progress * 100)}")
+                : root.selected.erase ? I18n.t("phone.eraseApply") : I18n.t("common.off");
+        }
+        if erase.open && !root.selected.erase: SectionBody {
+            Note { text: I18n.t("phone.eraseHint"); }
+            Row {
+                label: "";
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    label: I18n.t("phone.eraseObject");
+                    primary: true;
+                    clicked => { root.erase-start(); }
+                }
+            }
+        }
+        if erase.open && root.selected.erase: SectionBody {
+            HorizontalLayout {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+                spacing: 6px;
+                ToolButton {
+                    glyph: Glyph.brush;
+                    smart: true;
+                    label: I18n.t("phone.eraseThing");
+                    checked: root.painting && root.brush-tool == 0;
+                    clicked => { root.cutout-tool(0); root.cutout-painting(true); }
+                }
+                ToolButton {
+                    glyph: Glyph.brush;
+                    label: I18n.t("clipInspector.brush");
+                    checked: root.painting && root.brush-tool == 1;
+                    clicked => { root.cutout-tool(1); root.cutout-painting(true); }
+                }
+                ToolButton {
+                    glyph: Glyph.eraser;
+                    label: I18n.t("clipInspector.eraser");
+                    checked: root.painting && root.brush-tool == 3;
+                    clicked => { root.cutout-tool(3); root.cutout-painting(true); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Param {
+                label: I18n.t("common.size");
+                value: root.brush-size;
+                minimum: 0.005;
+                maximum: 0.5;
+                step: 0.005;
+                default-value: 0.06;
+                fmt: ParamFormat.fraction;
+                unit: "%";
+                unit-scale: 100;
+                changed(v) => { root.cutout-size(v); }
+            }
+            Note {
+                text: root.selected.erase-progress >= 0
+                    ? (root.selected.erase-fetching
+                        ? I18n.t1("phone.eraseFetching", "\{Math.round(root.selected.erase-progress * 100)}")
+                        : I18n.t1("phone.eraseWorking", "\{Math.round(root.selected.erase-progress * 100)}"))
+                    : root.selected.erase-following ? I18n.t("phone.eraseFollowing")
+                    : root.selected.erase-strokes > 0 ? I18n.t("phone.eraseReady")
+                    : I18n.t("phone.eraseHint");
+            }
+            Row {
+                label: "";
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    label: I18n.t("common.cancel");
+                    clicked => { root.erase-cancel(); }
+                }
+                Button {
+                    label: I18n.t("phone.eraseApply");
+                    primary: true;
+                    enabled: root.selected.erase-strokes > 0 && root.selected.erase-progress < 0;
+                    clicked => { root.erase-apply(); }
+                }
             }
         }
     }

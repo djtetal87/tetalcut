@@ -17,6 +17,10 @@ use super::*;
 /// lime the brushes and the selection are drawn in.
 pub(crate) const HIGHLIGHT: [u8; 3] = [0xcb, 0xf5, 0x3f];
 
+/// TetalCut: the tint of what Erase object will take out - red, the
+/// colour everyone reads as "this goes".
+pub(crate) const ERASE_HIGHLIGHT: [u8; 3] = [0xff, 0x2d, 0x2d];
+
 /// A cutout as the frame loop runs it: the masks, what to paint on them,
 /// and how a decoded pixel finds its place in the source.
 pub(crate) struct CutoutJob {
@@ -63,6 +67,11 @@ impl CutoutJob {
     /// `None` leaves the picture whole: an instant not analysed yet is
     /// shown as shot rather than not at all.
     pub(crate) fn cut(&self, frame: &Frame, source_time: Rational) -> Option<Frame> {
+        // An erase is never cut by: until it is written, the picture shows
+        // as shot.
+        if self.cutout.erase {
+            return None;
+        }
         let mask = self
             .store
             .resolved(source_time.as_f64(), &self.cutout, self.aspect)?;
@@ -74,6 +83,14 @@ impl CutoutJob {
     /// The frame whole, with what the cutout keeps tinted over it: the
     /// painting view. `None` as for `cut`.
     pub(crate) fn highlight(&self, frame: &Frame, source_time: Rational) -> Option<Frame> {
+        if self.cutout.erase {
+            let mask =
+                self.store
+                    .erase_mask(source_time.as_f64(), &self.cutout, self.aspect)?;
+            let mut out = frame.clone();
+            concat_vision::highlight(&mut out, &mask, &self.mapping, ERASE_HIGHLIGHT);
+            return Some(out);
+        }
         let mask = self
             .store
             .resolved(source_time.as_f64(), &self.cutout, self.aspect)?;

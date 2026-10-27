@@ -164,7 +164,8 @@ impl Cutouts {
             let Some(cutout) = clip.cutout.as_ref() else {
                 continue;
             };
-            if !clip.kind.is_visual() {
+            // TetalCut: an erase paints over nothing; no model looks.
+            if !clip.kind.is_visual() || cutout.erase {
                 continue;
             }
             let Some(media) = project.media_by_id(&clip.media_id) else {

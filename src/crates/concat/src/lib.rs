@@ -1361,6 +1361,15 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_cutout_clear(on_window!(|state| {
         state.cutout_clear();
     }));
+    editor.on_erase_start(on_window!(|state| {
+        state.erase_start();
+    }));
+    editor.on_erase_apply(on_window!(|state| {
+        state.erase_apply();
+    }));
+    editor.on_erase_cancel(on_window!(|state| {
+        state.erase_cancel();
+    }));
     editor.on_clip_enhance_set(on_window!(|state, on: bool| {
         state.clip_enhance_set(on);
     }));

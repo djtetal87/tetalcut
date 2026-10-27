@@ -734,5 +734,22 @@
   "sounds.deleteAgain": "Tap the trash again to delete it",
   "sounds.working": "Working on your sounds…",
   "sounds.fetchingPopular": "Downloading the Populares pack from Freesound…",
-  "sounds.popularNeedsKey": "To download Populares, paste your Freesound key in Buscar en Freesound."
+  "sounds.popularNeedsKey": "To download Populares, paste your Freesound key in Buscar en Freesound.",
+  "phone.eraseObject": "Erase object",
+  "phone.eraseThing": "Object",
+  "phone.brushSmaller": "Thinner",
+  "phone.brushBigger": "Thicker",
+  "phone.eraseApply": "Erase",
+  "phone.eraseHint": "Paint over what you want to erase. \"Object\" takes the whole thing and follows it through the clip.",
+  "phone.eraseFollowing": "Following the object through the clip…",
+  "phone.eraseReady": "Tap \"Erase\" to take it out. You can keep painting to add more.",
+  "phone.eraseFetching": "Downloading the model… {0}%",
+  "phone.eraseWorking": "Erasing the object… {0}%",
+  "studio.eraseBusy": "An object is already being erased; wait for it to finish.",
+  "studio.erasePaintFirst": "First paint over what you want to erase.",
+  "studio.eraseStillFollowing": "The object is still being followed through the clip; try again in a moment.",
+  "studio.erasing": "Erasing the object from {0}…",
+  "studio.erase": "Erase object: {0}",
+  "studio.erasedSuffix": "object erased",
+  "studio.erased": "Done: the clip now shows without the object. Undo brings it back."
 }

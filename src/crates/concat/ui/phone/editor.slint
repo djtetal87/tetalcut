@@ -401,7 +401,7 @@ export component PhoneEditor inherits Rectangle {
             stroke-path: Editor.stroke-path;
             stroke-width: Editor.stroke-width;
             stroke-erase: Editor.stroke-erase;
-            painting: Editor.painting && Editor.selected-clip.cutout == 2;
+            painting: Editor.painting && (Editor.selected-clip.cutout == 2 || Editor.selected-clip.erase);
 
             play-toggled => { Editor.play-toggled(); }
             seek(seconds) => { Editor.seek(seconds); }
@@ -626,6 +626,32 @@ export component PhoneEditor inherits Rectangle {
         }
     }
 
+    // TetalCut: what Erase object is doing, over the foot of the lanes.
+    if root.has-clip && Editor.selected-clip.erase: Rectangle {
+        x: 12px;
+        y: root.height - root.bar-h - self.height - 8px;
+        width: root.width - 24px;
+        height: erase-note.preferred-height + 14px;
+        border-radius: Theme.r;
+        background: #000000c0;
+
+        erase-note := Text {
+            x: 10px;
+            width: parent.width - 20px;
+            color: #ffffff;
+            font-size: Theme.fs;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            text: Editor.selected-clip.erase-progress >= 0
+                ? (Editor.selected-clip.erase-fetching
+                    ? I18n.t1("phone.eraseFetching", "\{Math.round(Editor.selected-clip.erase-progress * 100)}")
+                    : I18n.t1("phone.eraseWorking", "\{Math.round(Editor.selected-clip.erase-progress * 100)}"))
+                : Editor.selected-clip.erase-following ? I18n.t("phone.eraseFollowing")
+                : Editor.selected-clip.erase-strokes > 0 ? I18n.t("phone.eraseReady")
+                : I18n.t("phone.eraseHint");
+        }
+    }
+
     // ── the bar ──────────────────────────────────────────────────────
     Rectangle {
         x: 0;
@@ -720,7 +746,69 @@ export component PhoneEditor inherits Rectangle {
         // the clip is - a still has no speed, a sound no picture, a
         // title only its words and its effects - the same rule the
         // inspector's tabs follow.
-        if root.has-clip: ToolStrip {
+        // TetalCut: Erase object. While a clip is painted for one the bar
+        // is the brushes - the monitor above stays free to paint on - and
+        // the verb that takes the painted thing out.
+        if root.has-clip && Editor.selected-clip.erase: ToolStrip {
+            x: 0;
+            y: 1px;
+            width: parent.width;
+            height: parent.height - 1px;
+
+            ToolItem {
+                glyph: Glyph.close;
+                label: I18n.t("common.cancel");
+                clicked => { Editor.erase-cancel(); }
+            }
+            ToolItem {
+                glyph: Glyph.sparkle;
+                label: I18n.t("phone.eraseThing");
+                enabled: Editor.selected-clip.erase-progress < 0;
+                current: Editor.painting && Editor.brush-tool == 0;
+                clicked => { Editor.cutout-tool(0); Editor.cutout-painting(true); }
+            }
+            ToolItem {
+                glyph: Glyph.brush;
+                label: I18n.t("clipInspector.brush");
+                enabled: Editor.selected-clip.erase-progress < 0;
+                current: Editor.painting && Editor.brush-tool == 1;
+                clicked => { Editor.cutout-tool(1); Editor.cutout-painting(true); }
+            }
+            ToolItem {
+                glyph: Glyph.eraser;
+                label: I18n.t("clipInspector.eraser");
+                enabled: Editor.selected-clip.erase-progress < 0;
+                current: Editor.painting && Editor.brush-tool == 3;
+                clicked => { Editor.cutout-tool(3); Editor.cutout-painting(true); }
+            }
+            ToolItem {
+                glyph: Glyph.minus;
+                label: I18n.t("phone.brushSmaller");
+                enabled: Editor.selected-clip.erase-progress < 0;
+                clicked => { Editor.cutout-size(Editor.brush-size / 1.4); }
+            }
+            ToolItem {
+                glyph: Glyph.plus;
+                label: I18n.t("phone.brushBigger");
+                enabled: Editor.selected-clip.erase-progress < 0;
+                clicked => { Editor.cutout-size(Editor.brush-size * 1.4); }
+            }
+            ToolItem {
+                glyph: Glyph.undo;
+                label: I18n.t("phone.undo");
+                enabled: Editor.selected-clip.erase-progress < 0 && Editor.can-undo;
+                clicked => { Editor.undo(); }
+            }
+            ToolItem {
+                glyph: Glyph.check;
+                label: I18n.t("phone.eraseApply");
+                current: true;
+                enabled: Editor.selected-clip.erase-strokes > 0 && Editor.selected-clip.erase-progress < 0;
+                clicked => { Editor.erase-apply(); }
+            }
+        }
+
+        if root.has-clip && !Editor.selected-clip.erase: ToolStrip {
             x: 0;
             y: 1px;
             width: parent.width;
@@ -749,6 +837,16 @@ export component PhoneEditor inherits Rectangle {
                 label: I18n.t("phone.edit");
                 current: root.sheet == "clip-video";
                 clicked => { root.show("clip-video", true); }
+            }
+            // TetalCut: paint over a thing, and it is taken out of the
+            // picture with what was behind it made up.
+            if root.is-picture: ToolItem {
+                glyph: Glyph.eraser;
+                label: I18n.t("phone.eraseObject");
+                clicked => {
+                    root.hide();
+                    Editor.erase-start();
+                }
             }
             if root.is-text: ToolItem {
                 glyph: Glyph.text-mark;
@@ -1116,6 +1214,9 @@ export component PhoneEditor inherits Rectangle {
             cutout-painting(on) => { Editor.cutout-painting(on); }
             cutout-subject(index) => { Editor.cutout-subject(index); }
             cutout-clear => { Editor.cutout-clear(); }
+            erase-start => { Editor.erase-start(); }
+            erase-apply => { Editor.erase-apply(); }
+            erase-cancel => { Editor.erase-cancel(); }
         }
 
         if root.sheet == "clip-speed": VerticalLayout {

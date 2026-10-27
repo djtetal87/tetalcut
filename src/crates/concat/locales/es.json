@@ -734,5 +734,22 @@
   "sounds.deleteAgain": "Toca la papelera otra vez para borrarlo",
   "sounds.working": "Procesando tus sonidos…",
   "sounds.fetchingPopular": "Descargando el pack Populares de Freesound…",
-  "sounds.popularNeedsKey": "Para descargar Populares, pega tu clave de Freesound en la pestaña Buscar en Freesound."
+  "sounds.popularNeedsKey": "Para descargar Populares, pega tu clave de Freesound en la pestaña Buscar en Freesound.",
+  "phone.eraseObject": "Borrar objeto",
+  "phone.eraseThing": "Objeto",
+  "phone.brushSmaller": "Más fino",
+  "phone.brushBigger": "Más grueso",
+  "phone.eraseApply": "Borrar",
+  "phone.eraseHint": "Pinta sobre lo que quieres borrar. «Objeto» toma la cosa completa y la sigue en todo el clip.",
+  "phone.eraseFollowing": "Siguiendo el objeto a lo largo del clip…",
+  "phone.eraseReady": "Toca «Borrar» para quitarlo. Puedes seguir pintando para agregar más.",
+  "phone.eraseFetching": "Descargando el modelo… {0}%",
+  "phone.eraseWorking": "Borrando el objeto… {0}%",
+  "studio.eraseBusy": "Ya se está borrando un objeto; espera a que termine.",
+  "studio.erasePaintFirst": "Primero pinta sobre lo que quieres borrar.",
+  "studio.eraseStillFollowing": "Todavía se está siguiendo el objeto en el clip; inténtalo en un momento.",
+  "studio.erasing": "Borrando el objeto de {0}…",
+  "studio.erase": "Borrar objeto: {0}",
+  "studio.erasedSuffix": "sin objeto",
+  "studio.erased": "Listo: el clip ahora se ve sin el objeto. Deshacer lo trae de vuelta."
 }

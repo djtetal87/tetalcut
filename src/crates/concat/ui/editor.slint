@@ -367,6 +367,11 @@ export global Editor {
     callback cutout-painting(on: bool);
     callback cutout-subject(index: int);
     callback cutout-clear();
+    /// TetalCut: Erase object - start painting the thing to take out of
+    /// the selected clip, take it out, or put it all away.
+    callback erase-start();
+    callback erase-apply();
+    callback erase-cancel();
     callback clip-enhance-set(on: bool);
     /// The transition riding into the selected clip; see VideoPanel.
     callback transition-remove();

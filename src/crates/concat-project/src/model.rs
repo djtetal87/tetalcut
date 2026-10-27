@@ -428,6 +428,13 @@ pub struct Cutout {
     /// Corrections painted on the monitor, in the order they were made.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub strokes: Vec<Stroke>,
+    /// TetalCut: Erase object. The strokes paint what to take out of the
+    /// picture rather than what to keep: the mask is the strokes alone,
+    /// with no model under them, the picture is never cut by it, and the
+    /// monitor tints it while it is painted. Erase then writes a copy of
+    /// the clip's file with it filled in, and the cutout goes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub erase: bool,
 }
 
 /// The two ways a cutout decides what stays.
@@ -525,6 +532,17 @@ impl Cutout {
             subject: Subject::Auto,
             feather: DEFAULT_FEATHER,
             strokes: Vec::new(),
+            erase: false,
+        }
+    }
+
+    /// TetalCut: an Erase object with nothing painted yet.
+    pub fn erase() -> Cutout {
+        Cutout {
+            mode: CutoutMode::Custom,
+            erase: true,
+            feather: 0.0,
+            ..Cutout::auto()
         }
     }
 

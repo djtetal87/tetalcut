@@ -201,7 +201,9 @@ impl Brushes {
             return Err("the stroke has no instant".to_owned());
         };
         let mut store = MaskStore::open(&request.dir());
+        log::info!("brush: following a stroke at {at:.2}s of {}", request.media_path);
         let brush = self.brush(&cancel, progress)?;
+        log::info!("brush: model ready");
         progress(Progress::Analysing(0.0));
 
         let (width, height) = Brush::input_size(request.media_size.0, request.media_size.1);

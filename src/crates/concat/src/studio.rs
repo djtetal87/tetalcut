@@ -6387,6 +6387,7 @@ impl Studio {
     /// Takes the painted thing out of the selected clip: writes the copy
     /// of its span with the hole filled, then points the clip at it.
     pub fn erase_apply(&mut self) {
+        log::info!("erase: asked");
         let Some(id) = self.sole_selection() else {
             return;
         };
@@ -6431,6 +6432,7 @@ impl Studio {
                 .outstanding()
         });
         if following || self.region_job.is_some() {
+            log::info!("erase: the brush is still following");
             self.ensure_regions();
             self.notify(&t("studio.eraseStillFollowing"), true);
             return;
@@ -9542,6 +9544,7 @@ impl Studio {
                 studio.region_job = None;
                 studio.cutout_jobs.remove(&key);
                 studio.pending_stroke = None;
+                log::info!("brush: done ({})", if result.is_ok() { "ok" } else { "failed" });
                 match result {
                     Ok(()) => {
                         studio.request_preview();

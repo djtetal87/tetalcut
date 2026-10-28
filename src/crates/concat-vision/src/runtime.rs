@@ -70,9 +70,27 @@ pub struct Model {
 impl Model {
     /// Loads a model from its bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Model, String> {
+        Model::build(bytes, true)
+    }
+
+    /// TetalCut: a model on the CPU alone. CoreML takes a network with
+    /// byte tensors and shapes it cannot know ahead badly - the eraser's -
+    /// and a phone's cores run that one well enough.
+    pub fn from_file_on_cpu(path: &std::path::Path) -> Result<Model, String> {
+        let bytes = std::fs::read(path)
+            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        Model::build(&bytes, false)
+    }
+
+    fn build(bytes: &[u8], accelerated: bool) -> Result<Model, String> {
         let mut builder = Session::builder().map_err(|error| format!("onnx runtime: {error}"))?;
+        let providers = if accelerated {
+            accelerators()
+        } else {
+            vec![ort::ep::CPU::default().build()]
+        };
         builder = builder
-            .with_execution_providers(accelerators())
+            .with_execution_providers(providers)
             .map_err(|error| format!("onnx runtime: {error}"))?;
         // Every core on one frame at a time: the models are convolutional
         // and a frame fills a machine on its own.

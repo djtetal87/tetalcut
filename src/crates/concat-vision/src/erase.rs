@@ -312,7 +312,7 @@ mod inference {
         /// [`crate::models::ModelId::Eraser`].
         pub fn load(path: &Path) -> Result<Eraser, String> {
             Ok(Eraser {
-                model: Mutex::new(Model::from_file(path)?),
+                model: Mutex::new(Model::from_file_on_cpu(path)?),
             })
         }
 

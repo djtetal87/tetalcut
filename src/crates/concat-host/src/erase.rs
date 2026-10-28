@@ -135,7 +135,9 @@ impl Erasers {
         if !models::installed(&self.data, ModelId::Eraser) {
             crate::cutout::fetch(ModelId::Eraser, &file, cancel, progress)?;
         }
+        log::info!("erase: loading {}", file.display());
         let eraser = Arc::new(Eraser::load(&file)?);
+        log::info!("erase: model loaded");
         *self.model.lock().map_err(|_| "model slot poisoned")? = Some(Arc::clone(&eraser));
         Ok(eraser)
     }
@@ -166,6 +168,13 @@ impl Erasers {
                 .map_err(|error| format!("{}: {error}", folder.display()))?;
         }
         progress(Progress::Analysing(0.0));
+        log::info!(
+            "erase: {} from {:.2}s for {:.2}s, {} strokes",
+            request.media_path,
+            request.start,
+            request.duration,
+            request.cutout.strokes.len()
+        );
         let store = MaskStore::open(&mask_dir(
             &request.project,
             &request.media_path,
@@ -246,6 +255,7 @@ fn footage(
     if width == 0 || height == 0 {
         return Err("the picture is too small to erase".to_owned());
     }
+    log::info!("erase: decoding at {width}x{height}");
     let partial_video = request.target.with_extension("part.mp4");
     let mut encoder = Encoder::create(
         &partial_video,
@@ -293,6 +303,9 @@ fn footage(
                 None => encoder.write_frame(&frame),
             }
             .map_err(|error| error.to_string())?;
+            if count == 0 {
+                log::info!("erase: first frame done (hole: {})", made.is_some());
+            }
             previous = made;
             count += 1;
             progress(Progress::Analysing(
@@ -300,6 +313,7 @@ fn footage(
             ));
         }
         encoder.finish().map_err(|error| error.to_string())?;
+        log::info!("erase: {count} frames written");
         Ok(count)
     })();
     drop(encoder);

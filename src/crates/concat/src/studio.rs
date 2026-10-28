@@ -6463,6 +6463,10 @@ impl Studio {
         self.pending_stroke = None;
         self.request_preview();
         self.notify(&tf("studio.erasing", &[&media.name]), false);
+        // The brush model has done its following; its memory goes to the
+        // eraser, which a phone needs.
+        self.host.brushes.release();
+        log::info!("erase: starting on {}", media.name);
         let erasers = Arc::clone(&self.host.erasers);
         let epoch = crate::host::project_epoch();
         spawn_in_project(

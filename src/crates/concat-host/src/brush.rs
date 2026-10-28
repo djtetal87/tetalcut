@@ -109,6 +109,18 @@ impl Brushes {
         }
     }
 
+    /// TetalCut: lets go of the model and the frames it has read, for a
+    /// job that needs the memory more - Erase object on a phone. Loaded
+    /// again by the next stroke.
+    pub fn release(&self) {
+        if let Ok(mut brush) = self.brush.lock() {
+            *brush = None;
+        }
+        if let Ok(mut embeddings) = self.embeddings.lock() {
+            embeddings.clear();
+        }
+    }
+
     /// Whether a stroke is being read.
     pub fn is_busy(&self) -> bool {
         self.gate.is_busy()

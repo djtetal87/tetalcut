@@ -185,6 +185,15 @@ impl Erasers {
         } else {
             footage(&eraser, &store, request, &job, progress)
         };
+        // The network is let go of after each run: an erase is rare, and
+        // a phone wants the memory back for playing the clip.
+        drop(eraser);
+        if let Ok(mut slot) = self.model.lock() {
+            *slot = None;
+        }
+        if let Err(error) = &result {
+            log::warn!("erase: {error}");
+        }
         result.map(|()| request.target.clone())
     }
 }
@@ -244,7 +253,7 @@ fn footage(
     let start = Rational::approximate(request.start).unwrap_or(Rational::ZERO);
     let options = DecodeOptions::default()
         .in_software()
-        .threaded(2)
+        .threaded(1)
         .starting_at(start);
     let mut decoder =
         Decoder::open(&request.media_path, &options).map_err(|error| error.to_string())?;
@@ -421,10 +430,11 @@ mod real {
         let video = var("TC_ERASE_VIDEO");
         let project = data.join("project");
         let mut cutout = Cutout::erase();
+        let size = if std::env::var("TC_ERASE_NOTHING").is_ok() { 0.0001 } else { 0.12 };
         cutout.strokes.push(Stroke {
             at: Some(0.0),
             tool: BrushTool::Brush,
-            size: 0.12,
+            size,
             points: vec![[0.45, 0.5], [0.55, 0.5]],
         });
         let request = EraseRequest {

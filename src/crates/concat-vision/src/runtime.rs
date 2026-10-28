@@ -87,11 +87,18 @@ impl Model {
         let providers = if accelerated {
             accelerators()
         } else {
-            vec![ort::ep::CPU::default().build()]
+            // TetalCut: no arena either - it keeps the largest run's
+            // buffers for good, hundreds of megabytes a phone wants back.
+            vec![ort::ep::CPU::default().with_arena_allocator(false).build()]
         };
         builder = builder
             .with_execution_providers(providers)
             .map_err(|error| format!("onnx runtime: {error}"))?;
+        if !accelerated {
+            builder = builder
+                .with_memory_pattern(false)
+                .map_err(|error| format!("onnx runtime: {error}"))?;
+        }
         // Every core on one frame at a time: the models are convolutional
         // and a frame fills a machine on its own.
         let threads = std::thread::available_parallelism()
